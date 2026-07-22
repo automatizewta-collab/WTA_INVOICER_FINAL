@@ -1,0 +1,50 @@
+# INVOICER - Docker Compose (MySQL)
+# Usage: cp .env.docker .env && docker compose up --build
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        DATABASE_URL: mysql://invoicer:${MYSQL_PASSWORD}@invoicer-db:3306/invoicer?charset=utf8mb4
+    container_name: invoicer-app
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: mysql://invoicer:${MYSQL_PASSWORD}@invoicer-db:3306/invoicer?charset=utf8mb4
+      NODE_ENV: production
+      MSSQL_HOST: ${MSSQL_HOST:-}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER:-}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD:-}
+      MSSQL_DATABASE: ${MSSQL_DATABASE:-}
+      MSSQL_ENCRYPT: ${MSSQL_ENCRYPT:-false}
+    depends_on:
+      invoicer-db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  invoicer-db:
+    image: mysql:8
+    container_name: invoicer-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: invoicer
+      MYSQL_USER: invoicer
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-invoicerpassword}
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
