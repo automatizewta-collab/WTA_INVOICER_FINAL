@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -21,7 +22,7 @@ import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
 import { NotesForm } from "@/components/shared/NotesForm";
 import { apiFetch } from "@/lib/utils";
-import { ArrowLeft, Save, Send, Database } from "lucide-react";
+import { ArrowLeft, Save, Send, Database, Plus } from "lucide-react";
 import { ErpImportDialog } from "@/components/shared/ErpImportDialog";
 
 const emptyShipment: ShipmentDetails = {
@@ -48,6 +49,7 @@ export function NewDocumentView() {
   const [dollarExchangeRate, setDollarExchangeRate] = useState<number | null>(null);
   const [htsusColumnTitle, setHtsusColumnTitle] = useState("");
   const [showSterileColumn, setShowSterileColumn] = useState(false);
+  const [showEndUseColumn, setShowEndUseColumn] = useState(false);
   const [senderId, setSenderId] = useState("");
   const [recipientId, setRecipientId] = useState("");
   const [items, setItems] = useState<DocumentItem[]>([]);
@@ -66,6 +68,22 @@ export function NewDocumentView() {
   });
   const senders = companies.filter((c) => c.type === "sender");
   const recipients = companies.filter((c) => c.type === "recipient");
+
+  const { data: settingsData } = useQuery<Record<string, string>>({
+    queryKey: ["settings"],
+    queryFn: () => apiFetch<Record<string, string>>("/api/settings"),
+  });
+
+  useEffect(() => {
+    if (settingsData?.default_notes && notes.length === 0) {
+      try {
+        const parsed = JSON.parse(settingsData.default_notes);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setNotes(parsed);
+        }
+      } catch { /* ignore */ }
+    }
+  }, [settingsData]); // intentionally only depend on settingsData
 
   const { data: catalogData, isLoading: catalogLoading } = useQuery<{
     items: Item[];
@@ -98,7 +116,7 @@ export function NewDocumentView() {
     createMutation.mutate({
       documentType, status, language, date, senderId,
       recipientId: recipientId || null, items, dollarExchangeRate, currency,
-      htsusColumnTitle: htsusColumnTitle || null, showSterileColumn,
+      htsusColumnTitle: htsusColumnTitle || null, showSterileColumn, showEndUseColumn,
       shipmentDetails,
       financialDetails: { ...financialDetails, total_value: totalValue },
       notes, contactName: contactName || null, contactPhone: contactPhone || null,
@@ -322,6 +340,18 @@ export function NewDocumentView() {
             <div className="space-y-2">
               <Label>Título Coluna HTSUS</Label>
               <Input placeholder="ex: HTSUS Code" value={htsusColumnTitle} onChange={(e) => setHtsusColumnTitle(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <Checkbox id="showSterile" checked={showSterileColumn}
+                onCheckedChange={(v) => setShowSterileColumn(!!v)} />
+              <Label htmlFor="showSterile" className="text-sm">Coluna Sterile</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="showEndUse" checked={showEndUseColumn}
+                onCheckedChange={(v) => setShowEndUseColumn(!!v)} />
+              <Label htmlFor="showEndUse" className="text-sm">Coluna End Use</Label>
             </div>
           </div>
         </CardContent>

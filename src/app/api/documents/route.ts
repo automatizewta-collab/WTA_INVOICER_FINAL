@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { startOfMonth, format, parseISO } from "date-fns";
 import { z } from "zod";
-import { parseJsonField } from "@/lib/utils";
 
 const documentCreateSchema = z.object({
   documentType: z.enum(["proforma", "invoice", "packing_list"]),
@@ -16,6 +15,7 @@ const documentCreateSchema = z.object({
   currency: z.enum(["USD", "EUR"]).optional().default("USD"),
   htsusColumnTitle: z.string().optional().nullable(),
   showSterileColumn: z.boolean().optional().default(false),
+  showEndUseColumn: z.boolean().optional().default(false),
   shipmentDetails: z.any().optional().nullable(),
   financialDetails: z.any().optional().nullable(),
   notes: z.array(z.string()).optional().default([]),
@@ -36,18 +36,19 @@ function serializeDocument(doc: Record<string, unknown>) {
     date: new Date(doc.date as string).toISOString(),
     senderId: doc.senderId,
     recipientId: doc.recipientId,
-    items: parseJsonField(doc.items, []),
+    items: JSON.parse(doc.items as string),
     dollarExchangeRate: doc.dollarExchangeRate,
     currency: doc.currency,
     htsusColumnTitle: doc.htsusColumnTitle,
     showSterileColumn: doc.showSterileColumn,
+    showEndUseColumn: doc.showEndUseColumn,
     originProformaId: doc.originProformaId,
     contactName: doc.contactName,
     contactPhone: doc.contactPhone,
     orderNumber: doc.orderNumber,
-    shipmentDetails: parseJsonField(doc.shipmentDetails, null),
-    financialDetails: parseJsonField(doc.financialDetails, {}),
-    notes: parseJsonField(doc.notes, []),
+    shipmentDetails: doc.shipmentDetails ? JSON.parse(doc.shipmentDetails as string) : null,
+    financialDetails: doc.financialDetails ? JSON.parse(doc.financialDetails as string) : null,
+    notes: doc.notes ? JSON.parse(doc.notes as string) : [],
     pdfUrl: doc.pdfUrl,
     createdAt: (doc.createdAt as Date).toISOString(),
     updatedAt: (doc.updatedAt as Date).toISOString(),
@@ -100,8 +101,10 @@ export async function GET(request: NextRequest) {
       select: { financialDetails: true },
     });
     const totalValue = issuedDocs.reduce((sum, doc) => {
-      const fd = parseJsonField<Record<string, number>>(doc.financialDetails, {});
-      return sum + (fd.total_value || 0);
+      try {
+        const fd = JSON.parse(doc.financialDetails);
+        return sum + (fd.total_value || 0);
+      } catch { return sum; }
     }, 0);
 
     return NextResponse.json({
@@ -156,6 +159,7 @@ export async function POST(request: NextRequest) {
       currency: data.currency,
       htsusColumnTitle: data.htsusColumnTitle,
       showSterileColumn: data.showSterileColumn,
+      showEndUseColumn: data.showEndUseColumn,
       shipmentDetails: shipmentJson,
       notes: notesJson,
       contactName: data.contactName || null,
@@ -182,47 +186,92 @@ export async function POST(request: NextRequest) {
       results = [serializeDocument(doc as unknown as Record<string, unknown>)];
 
     } else if (data.documentType === "proforma") {
-      // CASCADE: Create Proforma + Invoice + Packing List (atomic transaction)
+      // CASCADE: Create Proforma + Invoice + Packing List
       const plFinancial = JSON.stringify({
         discount: 0, shipping_cost: 0, insurance: 0, bank_fees: 0, total_value: 0,
       });
       const invFinancial = data.financialDetails ? JSON.stringify(data.financialDetails) : null;
 
-      const [proforma, invoice, packingList] = await db.$transaction(async (tx) => {
-        const proforma = await tx.document.create({
-          data: { ...baseData, number, documentType: "proforma", status: data.status, financialDetails: invFinancial },
+      const [proforma, invoice, packingList] = await db.$transaction([
+        db.document.create({
+          data: {
+            ...baseData,
+            number,
+            documentType: "proforma",
+            status: data.status,
+            financialDetails: invFinancial,
+          },
           include: { sender: true, recipient: true },
-        });
-        const invoice = await tx.document.create({
-          data: { ...baseData, number: `${number}-INV`, documentType: "invoice", status: data.status, financialDetails: invFinancial, originProformaId: proforma.id },
+        }),
+        db.document.create({
+          data: {
+            ...baseData,
+            number: `${number}-INV`,
+            documentType: "invoice",
+            status: data.status,
+            financialDetails: invFinancial,
+          },
           include: { sender: true, recipient: true },
-        });
-        const packingList = await tx.document.create({
-          data: { ...baseData, number: `${number}-PL`, documentType: "packing_list", status: data.status, financialDetails: plFinancial, originProformaId: proforma.id },
+        }),
+        db.document.create({
+          data: {
+            ...baseData,
+            number: `${number}-PL`,
+            documentType: "packing_list",
+            status: data.status,
+            financialDetails: plFinancial,
+            originProformaId: undefined,
+          },
           include: { sender: true, recipient: true },
-        });
-        return [proforma, invoice, packingList];
+        }),
+      ]);
+
+      // Set origin links
+      await db.document.update({
+        where: { id: invoice.id },
+        data: { originProformaId: proforma.id },
+      });
+      await db.document.update({
+        where: { id: packingList.id },
+        data: { originProformaId: proforma.id },
       });
 
       results = [proforma, invoice, packingList].map((d) => serializeDocument(d as unknown as Record<string, unknown>));
 
     } else if (data.documentType === "invoice") {
-      // CASCADE: Create Invoice + Packing List (atomic transaction)
+      // CASCADE: Create Invoice + Packing List
       const plFinancial = JSON.stringify({
         discount: 0, shipping_cost: 0, insurance: 0, bank_fees: 0, total_value: 0,
       });
       const invFinancial = data.financialDetails ? JSON.stringify(data.financialDetails) : null;
 
-      const [invoice, packingList] = await db.$transaction(async (tx) => {
-        const invoice = await tx.document.create({
-          data: { ...baseData, number, documentType: "invoice", status: data.status, financialDetails: invFinancial },
+      const [invoice, packingList] = await db.$transaction([
+        db.document.create({
+          data: {
+            ...baseData,
+            number,
+            documentType: "invoice",
+            status: data.status,
+            financialDetails: invFinancial,
+          },
           include: { sender: true, recipient: true },
-        });
-        const packingList = await tx.document.create({
-          data: { ...baseData, number: `${number}-PL`, documentType: "packing_list", status: data.status, financialDetails: plFinancial, originProformaId: invoice.id },
+        }),
+        db.document.create({
+          data: {
+            ...baseData,
+            number: `${number}-PL`,
+            documentType: "packing_list",
+            status: data.status,
+            financialDetails: plFinancial,
+            originProformaId: undefined,
+          },
           include: { sender: true, recipient: true },
-        });
-        return [invoice, packingList];
+        }),
+      ]);
+
+      await db.document.update({
+        where: { id: packingList.id },
+        data: { originProformaId: invoice.id },
       });
 
       results = [invoice, packingList].map((d) => serializeDocument(d as unknown as Record<string, unknown>));

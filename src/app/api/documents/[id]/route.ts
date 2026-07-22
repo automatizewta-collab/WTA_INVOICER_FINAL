@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { parseJsonField } from "@/lib/utils";
 
 function serializeDocument(doc: Record<string, unknown>) {
   return {
@@ -12,18 +11,19 @@ function serializeDocument(doc: Record<string, unknown>) {
     date: new Date(doc.date as string).toISOString(),
     senderId: doc.senderId,
     recipientId: doc.recipientId,
-    items: parseJsonField(doc.items, []),
+    items: JSON.parse(doc.items as string),
     dollarExchangeRate: doc.dollarExchangeRate,
     currency: doc.currency,
     htsusColumnTitle: doc.htsusColumnTitle,
     showSterileColumn: doc.showSterileColumn,
+    showEndUseColumn: doc.showEndUseColumn,
     originProformaId: doc.originProformaId,
     contactName: doc.contactName,
     contactPhone: doc.contactPhone,
     orderNumber: doc.orderNumber,
-    shipmentDetails: parseJsonField(doc.shipmentDetails, null),
-    financialDetails: parseJsonField(doc.financialDetails, {}),
-    notes: parseJsonField(doc.notes, []),
+    shipmentDetails: doc.shipmentDetails ? JSON.parse(doc.shipmentDetails as string) : null,
+    financialDetails: doc.financialDetails ? JSON.parse(doc.financialDetails as string) : null,
+    notes: doc.notes ? JSON.parse(doc.notes as string) : [],
     pdfUrl: doc.pdfUrl,
     createdAt: (doc.createdAt as Date).toISOString(),
     updatedAt: (doc.updatedAt as Date).toISOString(),
@@ -80,6 +80,7 @@ export async function PUT(
     if (body.currency !== undefined) updateData.currency = body.currency;
     if (body.htsusColumnTitle !== undefined) updateData.htsusColumnTitle = body.htsusColumnTitle;
     if (body.showSterileColumn !== undefined) updateData.showSterileColumn = body.showSterileColumn;
+    if (body.showEndUseColumn !== undefined) updateData.showEndUseColumn = body.showEndUseColumn;
     if (body.shipmentDetails !== undefined) updateData.shipmentDetails = JSON.stringify(body.shipmentDetails);
     if (body.financialDetails !== undefined) updateData.financialDetails = JSON.stringify(body.financialDetails);
     if (body.notes !== undefined) updateData.notes = JSON.stringify(body.notes);

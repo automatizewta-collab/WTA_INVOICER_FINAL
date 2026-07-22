@@ -71,6 +71,7 @@ export interface DocumentWithRelations {
   currency: Currency;
   htsusColumnTitle: string | null;
   showSterileColumn: boolean;
+  showEndUseColumn: boolean;
   originProformaId: string | null;
   contactName: string | null;
   contactPhone: string | null;

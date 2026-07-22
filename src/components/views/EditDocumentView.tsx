@@ -68,6 +68,7 @@ export function EditDocumentView() {
   const [dollarExchangeRate, setDollarExchangeRate] = useState<number | null>(null);
   const [htsusColumnTitle, setHtsusColumnTitle] = useState("");
   const [showSterileColumn, setShowSterileColumn] = useState(false);
+  const [showEndUseColumn, setShowEndUseColumn] = useState(false);
   const [senderId, setSenderId] = useState("");
   const [recipientId, setRecipientId] = useState("");
   const [items, setItems] = useState<DocumentItem[]>([]);
@@ -109,6 +110,7 @@ export function EditDocumentView() {
       setDollarExchangeRate(doc.dollarExchangeRate),
       setHtsusColumnTitle(doc.htsusColumnTitle || ""),
       setShowSterileColumn(doc.showSterileColumn),
+      setShowEndUseColumn(doc.showEndUseColumn),
       setSenderId(doc.senderId),
       setRecipientId(doc.recipientId || ""),
       setItems(Array.isArray(doc.items) ? doc.items : []),
@@ -145,7 +147,7 @@ export function EditDocumentView() {
           recipientId: recipientId || null, items,
           dollarExchangeRate, currency,
           htsusColumnTitle: htsusColumnTitle || null,
-          showSterileColumn, shipmentDetails,
+          showSterileColumn, showEndUseColumn, shipmentDetails,
           financialDetails: { ...financialDetails, total_value: totalValue },
           notes, status: "issued",
         }),
@@ -162,9 +164,19 @@ export function EditDocumentView() {
     onError: () => toast.error("Erro ao emitir documento"),
   });
 
-  const generatePdf = () => {
-    window.open(`/api/documents/${editDocumentId}/pdf`, "_blank");
-  };
+  const generatePdfMutation = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/documents/${editDocumentId}/pdf`, { method: "POST" }),
+    onSuccess: (data) => {
+      if (data?.pdfUrl) {
+        toast.success("PDF gerado!");
+        window.open(data.pdfUrl, "_blank");
+      } else {
+        toast.error("PDF não retornou URL");
+      }
+    },
+    onError: () => toast.error("Erro ao gerar PDF"),
+  });
 
   const handleSave = () => {
     if (!senderId) { toast.error("Selecione o remetente"); return; }
@@ -172,7 +184,7 @@ export function EditDocumentView() {
     updateMutation.mutate({
       documentType, status: "draft", language, date, senderId,
       recipientId: recipientId || null, items, dollarExchangeRate, currency,
-      htsusColumnTitle: htsusColumnTitle || null, showSterileColumn,
+      htsusColumnTitle: htsusColumnTitle || null, showSterileColumn, showEndUseColumn,
       shipmentDetails,
       financialDetails: { ...financialDetails, total_value: totalValue },
       notes,
@@ -243,7 +255,7 @@ export function EditDocumentView() {
             </Button>
           )}
           <Button variant="outline" size="sm" className="gap-2"
-            onClick={generatePdf}>
+            onClick={() => generatePdfMutation.mutate()} disabled={generatePdfMutation.isPending}>
             <FileDown className="h-4 w-4" /> PDF
           </Button>
         </div>
@@ -300,10 +312,17 @@ export function EditDocumentView() {
                 onChange={(e) => setHtsusColumnTitle(e.target.value)} />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Checkbox id="showSterile" checked={showSterileColumn}
-              onCheckedChange={(v) => setShowSterileColumn(!!v)} />
-            <Label htmlFor="showSterile" className="text-sm">Coluna Sterile</Label>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <Checkbox id="showSterile" checked={showSterileColumn}
+                onCheckedChange={(v) => setShowSterileColumn(!!v)} />
+              <Label htmlFor="showSterile" className="text-sm">Coluna Sterile</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="showEndUse" checked={showEndUseColumn}
+                onCheckedChange={(v) => setShowEndUseColumn(!!v)} />
+              <Label htmlFor="showEndUse" className="text-sm">Coluna End Use</Label>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Save, Info } from "lucide-react";
+import { Save, Info, Plus, Trash2, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import type { Company } from "@/lib/types";
 import { apiFetch } from "@/lib/utils";
@@ -45,6 +45,42 @@ export function SettingsView() {
     ? { ...settings, ...localSettings }
     : localSettings;
 
+  // ── Default Notes state ──
+  const [defaultNotes, setDefaultNotes] = useState<string[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [notesInitialized, setNotesInitialized] = useState(false);
+
+  // Parse default_notes from settings on first load
+  if (!notesInitialized && initialized && !settingsLoading) {
+    setNotesInitialized(true);
+    try {
+      const raw = effectiveSettings.default_notes || "[]";
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setDefaultNotes(parsed);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const addNote = () => {
+    const trimmed = newNote.trim();
+    if (!trimmed) return;
+    setDefaultNotes((prev) => [...prev, trimmed]);
+    setNewNote("");
+  };
+
+  const removeNote = (index: number) => {
+    setDefaultNotes((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateNote = (index: number, value: string) => {
+    setDefaultNotes((prev) =>
+      prev.map((n, i) => (i === index ? value : n))
+    );
+  };
+
   const updateMutation = useMutation({
     mutationFn: (body: Record<string, string>) =>
       apiFetch("/api/settings", {
@@ -63,7 +99,12 @@ export function SettingsView() {
   });
 
   const handleSave = () => {
-    updateMutation.mutate(effectiveSettings);
+    // Include default_notes as JSON in the payload
+    const payload = {
+      ...effectiveSettings,
+      default_notes: JSON.stringify(defaultNotes),
+    };
+    updateMutation.mutate(payload);
   };
 
   const updateSetting = (key: string, value: string) => {
@@ -194,6 +235,74 @@ export function SettingsView() {
               </SelectContent>
             </Select>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Default Notes */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Notas Padrão (Default Notes)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Essas notas serão pré-preenchidas automaticamente ao criar um novo documento.
+            Você pode editar ou remover cada nota individualmente.
+          </p>
+
+          {/* Existing notes list */}
+          <div className="space-y-2">
+            {defaultNotes.length === 0 && (
+              <p className="text-sm text-muted-foreground italic">
+                Nenhuma nota padrão cadastrada.
+              </p>
+            )}
+            {defaultNotes.map((note, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Input
+                  value={note}
+                  onChange={(e) => updateNote(index, e.target.value)}
+                  className="flex-1"
+                  placeholder="Texto da nota..."
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 text-destructive hover:text-destructive"
+                  onClick={() => removeNote(index)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {/* Add new note */}
+          <div className="flex items-center gap-2">
+            <Input
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              placeholder="Adicionar nova nota padrão..."
+              className="flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addNote();
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              onClick={addNote}
+              disabled={!newNote.trim()}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
