@@ -153,7 +153,7 @@ export function EditDocumentView() {
           showSterileColumn, showEndUseColumn, shipmentDetails,
           financialDetails: { ...financialDetails, total_value: totalValue },
           notes, status: "issued",
-          recipientInfo: recipientId ? recipientInfo : null,
+          recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
         }),
       });
       // Then issue (cascade)
@@ -192,7 +192,7 @@ export function EditDocumentView() {
       shipmentDetails,
       financialDetails: { ...financialDetails, total_value: totalValue },
       notes,
-      recipientInfo: recipientId ? recipientInfo : null,
+      recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
     });
   };
 
@@ -226,6 +226,7 @@ export function EditDocumentView() {
   const recipients = companies.filter((c) => c.type === "recipient");
   const isDraft = status === "draft";
   const isFromErp = !!doc?.orderNumber;
+  const showRecipientFields = !!(recipientId || (recipientInfo && Object.keys(recipientInfo).length > 0));
 
   return (
     <div className="space-y-6">
@@ -370,7 +371,7 @@ export function EditDocumentView() {
               )}
             </div>
           </div>
-          {recipientId && (
+          {showRecipientFields && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Email</Label>

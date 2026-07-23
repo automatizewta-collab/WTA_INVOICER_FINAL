@@ -82,7 +82,7 @@ function loadItemsFromCsv(): CsvItem[] {
   ];
 
   let csvPath: string | null = null;
-  for (var k = 0; k < possiblePaths.length; k++) {
+  for (let k = 0; k < possiblePaths.length; k++) {
     if (existsSync(possiblePaths[k])) {
       csvPath = possiblePaths[k];
       break;
@@ -91,7 +91,7 @@ function loadItemsFromCsv(): CsvItem[] {
 
   if (!csvPath) {
     console.log("[SEED] WARNING: itens.csv not found in any expected path:");
-    for (var w = 0; w < possiblePaths.length; w++) {
+    for (let w = 0; w < possiblePaths.length; w++) {
       console.log("  - " + possiblePaths[w]);
     }
     return [];
@@ -129,7 +129,7 @@ function loadItemsFromCsv(): CsvItem[] {
 async function main() {
   console.log("[SEED] Starting...");
 
-  var dbUrl = process.env.DATABASE_URL || "";
+  const dbUrl = process.env.DATABASE_URL || "";
   console.log("[SEED] Database: " + dbUrl.substring(0, 40) + "...");
 
   // -- Check if seed already ran (idempotent) --
@@ -189,8 +189,8 @@ async function main() {
     } else {
       console.log("[SEED] Loaded " + csvItems.length + " items from CSV, inserting...");
 
-      var BATCH_SIZE = 50;
-      var created = 0;
+      const BATCH_SIZE = 50;
+      let created = 0;
 
       for (let i = 0; i < csvItems.length; i += BATCH_SIZE) {
         const batch = csvItems.slice(i, i + BATCH_SIZE);

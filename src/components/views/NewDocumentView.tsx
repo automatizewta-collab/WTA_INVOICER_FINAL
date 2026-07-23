@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
 import { NotesForm } from "@/components/shared/NotesForm";
 import { apiFetch } from "@/lib/utils";
-import { ArrowLeft, Save, Send, Database, Plus } from "lucide-react";
+import { ArrowLeft, Save, Send, Database } from "lucide-react";
 import { ErpImportDialog } from "@/components/shared/ErpImportDialog";
 
 const emptyShipment: ShipmentDetails = {
@@ -58,13 +58,26 @@ export function NewDocumentView() {
   const [notes, setNotes] = useState<string[]>([]);
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
   const [erpDialogOpen, setErpDialogOpen] = useState(false);
   const [erpImporting, setErpImporting] = useState(false);
   const [recipientInfo, setRecipientInfo] = useState<RecipientInfo>({});
 
-  // Auto-fill recipient info when recipient is selected
+  const { data: companies = [], isLoading: companiesLoading } = useQuery<Company[]>({
+    queryKey: ["companies", "all"],
+    queryFn: () => apiFetch<Company[]>("/api/companies?type=all"),
+  });
+  const senders = companies.filter((c) => c.type === "sender");
+  const recipients = companies.filter((c) => c.type === "recipient");
+
+  // Auto-fill recipient info when recipient is selected (use companies in deps, not recipients array ref)
+  // Skip when ERP import just set the data
   useEffect(() => {
+    if (skipRecipientEffect.current) {
+      skipRecipientEffect.current = false;
+      return;
+    }
     if (recipientId) {
       const company = recipients.find((c) => c.id === recipientId);
       if (company) {
@@ -77,17 +90,8 @@ export function NewDocumentView() {
           country: company.country || "",
         });
       }
-    } else {
-      setRecipientInfo({});
     }
-  }, [recipientId, recipients]);
-
-  const { data: companies = [], isLoading: companiesLoading } = useQuery<Company[]>({
-    queryKey: ["companies", "all"],
-    queryFn: () => apiFetch<Company[]>("/api/companies?type=all"),
-  });
-  const senders = companies.filter((c) => c.type === "sender");
-  const recipients = companies.filter((c) => c.type === "recipient");
+  }, [recipientId, companies]);
 
   const { data: settingsData } = useQuery<Record<string, string>>({
     queryKey: ["settings"],
@@ -142,11 +146,13 @@ export function NewDocumentView() {
       notes, contactName: contactName || null, contactPhone: contactPhone || null,
       orderNumber: orderNumber || null,
       customNumber: orderNumber || undefined,
-      recipientInfo: recipientId ? recipientInfo : null,
+      recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
     });
   };
 
-  // ── ERP Import → create draft → redirect to edit ──
+  const skipRecipientEffect = useRef(false);
+
+  // ── ERP Import → populate form (no immediate draft) ──
   const handleErpImported = async (data: {
     orderNumber: number;
     client: { name: string; cnpj: string; email: string; address: string; city: string; state: string; postalCode: string; country: string };
@@ -198,49 +204,38 @@ export function NewDocumentView() {
         sterile_at_import: item.sterile_at_import,
       }));
 
-      // Create draft proforma
-      const result = await apiFetch<Array<{ id: string; number: string }>>("/api/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          documentType: "proforma",
-          status: "draft",
-          senderId,
-          recipientId: companyId,
-          items: docItems,
-          orderNumber: String(data.orderNumber),
-          customNumber: String(data.orderNumber),
-          contactName: contactName || null,
-          contactPhone: contactPhone || null,
-          language,
-          currency,
-          dollarExchangeRate,
-          recipientInfo: {
-            email: data.client.email,
-            address: data.client.address,
-            city: data.client.city,
-            state: data.client.state,
-            postalCode: data.client.postalCode,
-            country: data.client.country,
-          },
-        }),
+      // Prevent the recipientId useEffect from overwriting our recipientInfo
+      skipRecipientEffect.current = true;
+
+      // Populate the form instead of creating a draft
+      setRecipientId(companyId);
+      setRecipientInfo({
+        email: contactEmail || data.client.email,
+        address: data.client.address,
+        city: data.client.city,
+        state: data.client.state,
+        postalCode: data.client.postalCode,
+        country: data.client.country,
       });
+      setItems(docItems);
+      setOrderNumber(String(data.orderNumber));
+      setDocumentType("proforma");
 
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
-
-      const draft = result[0];
-      const count = result.length;
-      toast.success(`Draft criado: ${draft.number}` + (count > 1 ? ` + ${count - 1} doc(s) cascata` : "") + ` (${data.items.length} itens)`);
-
-      // Navigate to edit
-      navigate("edit-document", draft.id);
+      const warnings = data.itemsNeedingAttention.length;
+      toast.success(
+        `OV ${data.orderNumber} importada (${data.items.length} itens)` +
+        (data.autoCreatedCount > 0 ? ` | ${data.autoCreatedCount} item(ns) auto-cadastrado(s)` : "") +
+        (warnings > 0 ? ` | ${warnings} item(ns) precisa(m) atenção` : "")
+      );
     } catch (err) {
       console.error(err);
-      toast.error("Erro ao criar draft da OV");
+      toast.error("Erro ao importar OV");
     } finally {
       setErpImporting(false);
     }
   };
+
+  const showRecipientFields = !!(recipientId || (recipientInfo && Object.keys(recipientInfo).length > 0));
 
   return (
     <div className="space-y-6">
@@ -291,6 +286,10 @@ export function NewDocumentView() {
               <div className="space-y-2">
                 <Label>Telefone</Label>
                 <Input placeholder="+55 11 ..." value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="w-36" />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input placeholder="email@empresa.com" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className="w-44" />
               </div>
             </div>
             <Button
@@ -403,17 +402,12 @@ export function NewDocumentView() {
               </SelectContent>
             </Select>
           )}
-          {recipientId && (
+          {showRecipientFields && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t">
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Email</Label>
-                <Input placeholder="email@company.com" value={recipientInfo.email || ""}
-                  onChange={(e) => setRecipientInfo({ ...recipientInfo, email: e.target.value })} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Cidade</Label>
-                <Input placeholder="City" value={recipientInfo.city || ""}
-                  onChange={(e) => setRecipientInfo({ ...recipientInfo, city: e.target.value })} className="h-8 text-sm" />
+                <Label className="text-xs text-muted-foreground">País</Label>
+                <Input placeholder="Country" value={recipientInfo.country || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, country: e.target.value })} className="h-8 text-sm" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Estado</Label>
@@ -421,9 +415,9 @@ export function NewDocumentView() {
                   onChange={(e) => setRecipientInfo({ ...recipientInfo, state: e.target.value })} className="h-8 text-sm" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">País</Label>
-                <Input placeholder="Country" value={recipientInfo.country || ""}
-                  onChange={(e) => setRecipientInfo({ ...recipientInfo, country: e.target.value })} className="h-8 text-sm" />
+                <Label className="text-xs text-muted-foreground">Cidade</Label>
+                <Input placeholder="City" value={recipientInfo.city || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, city: e.target.value })} className="h-8 text-sm" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">CEP/ZIP</Label>
@@ -434,6 +428,11 @@ export function NewDocumentView() {
                 <Label className="text-xs text-muted-foreground">Endereço</Label>
                 <Input placeholder="Address" value={recipientInfo.address || ""}
                   onChange={(e) => setRecipientInfo({ ...recipientInfo, address: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Email</Label>
+                <Input placeholder="email@company.com" value={recipientInfo.email || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, email: e.target.value })} className="h-8 text-sm" />
               </div>
             </div>
           )}

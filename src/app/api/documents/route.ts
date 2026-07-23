@@ -38,7 +38,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const resolved = await params;
+    const id = resolved?.id;
+    if (!id) {
+      return NextResponse.json({ error: "Missing document ID" }, { status: 400 });
+    }
     const document = await db.document.findUnique({
       where: { id },
       include: { sender: true, recipient: true },

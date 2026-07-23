@@ -157,9 +157,13 @@ function buildPdfHtml(
     if (sender.cnpj) senderInfoHtml += "<br>CNPJ: " + esc(sender.cnpj);
   }
 
-  // Parse recipientInfo overrides
+  // Parse recipientInfo overrides (doc is the first param, not the global 'document')
   let recipientOverrides: Record<string, string> = {};
-  try { recipientOverrides = JSON.parse(String(document.recipientInfo || "{}")); } catch { /* empty */ }
+  if (doc.recipientInfo && typeof doc.recipientInfo === "object") {
+    recipientOverrides = doc.recipientInfo as Record<string, string>;
+  } else if (typeof doc.recipientInfo === "string") {
+    try { recipientOverrides = JSON.parse(String(doc.recipientInfo)); } catch { /* empty */ }
+  }
 
   // ── Recipient block ──
   let recipientHtml = "";
