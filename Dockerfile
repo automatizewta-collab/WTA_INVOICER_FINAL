@@ -27,7 +27,10 @@ COPY . .
 ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
-# Generate Prisma client + build Next.js
+# ✅ SUBSTITUI o schema ANTES de gerar o client
+RUN mv prisma/schema.mysql.prisma prisma/schema.prisma
+
+# Generate Prisma client (agora com mysql) + build Next.js
 RUN bun run db:generate && \
     bun run build
 
@@ -45,7 +48,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Prisma: schema + migrations for runtime `migrate deploy`
+# Prisma: schema (já é o mysql) + migrations para runtime
 COPY --from=builder /app/prisma ./prisma
 
 # Install prisma CLI globally (includes engines, .wasm, etc.)
@@ -60,6 +63,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# devDependencies are NOT copied — standalone output only includes production deps
 # Run pending migrations then start
 CMD ["sh", "-c", "prisma migrate deploy && node server.js"]

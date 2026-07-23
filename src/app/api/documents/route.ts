@@ -170,23 +170,8 @@ export async function POST(request: NextRequest) {
 
     let results: unknown[] = [];
 
-    // ── Draft: create single document only (no cascade) ──
-    if (data.status === "draft") {
-      const docFinancial = data.financialDetails ? JSON.stringify(data.financialDetails) : null;
-      const doc = await db.document.create({
-        data: {
-          ...baseData,
-          number,
-          documentType: data.documentType,
-          status: "draft",
-          financialDetails: docFinancial,
-        },
-        include: { sender: true, recipient: true },
-      });
-      results = [serializeDocument(doc as unknown as Record<string, unknown>)];
-
-    } else if (data.documentType === "proforma") {
-      // CASCADE: Create Proforma + Invoice + Packing List
+    if (data.documentType === "proforma") {
+      // CASCADE: Always create Proforma + Invoice + Packing List (draft or issued)
       const plFinancial = JSON.stringify({
         discount: 0, shipping_cost: 0, insurance: 0, bank_fees: 0, total_value: 0,
       });
@@ -237,9 +222,10 @@ export async function POST(request: NextRequest) {
       });
 
       results = [proforma, invoice, packingList].map((d) => serializeDocument(d as unknown as Record<string, unknown>));
+      console.log(`[DOC] Created proforma cascade: ${number}, ${number}-INV, ${number}-PL (${data.status})`);
 
     } else if (data.documentType === "invoice") {
-      // CASCADE: Create Invoice + Packing List
+      // CASCADE: Always create Invoice + Packing List (draft or issued)
       const plFinancial = JSON.stringify({
         discount: 0, shipping_cost: 0, insurance: 0, bank_fees: 0, total_value: 0,
       });
@@ -275,6 +261,7 @@ export async function POST(request: NextRequest) {
       });
 
       results = [invoice, packingList].map((d) => serializeDocument(d as unknown as Record<string, unknown>));
+      console.log(`[DOC] Created invoice cascade: ${number}, ${number}-PL (${data.status})`);
 
     } else {
       // Packing List only — no cascade

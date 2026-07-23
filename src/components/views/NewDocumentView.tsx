@@ -200,7 +200,8 @@ export function NewDocumentView() {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
 
       const draft = result[0];
-      toast.success(`Draft criado: ${draft.number} (${data.items.length} itens)`);
+      const count = result.length;
+      toast.success(`Draft criado: ${draft.number}` + (count > 1 ? ` + ${count - 1} doc(s) cascata` : "") + ` (${data.items.length} itens)`);
 
       // Navigate to edit
       navigate("edit-document", draft.id);
