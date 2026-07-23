@@ -1,10 +1,11 @@
 # =============================================
 # INVOICER - Multi-stage Dockerfile (MySQL)
-# Target image size: < 200MB
+# Production-ready with auto-seed on first boot
 # =============================================
 
 # ---- Stage 1: Dependencies ----
 FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json bun.lock* ./
@@ -13,28 +14,23 @@ RUN npm install -g bun && \
 
 # ---- Stage 2: Build ----
 FROM node:20-alpine AS builder
+RUN npm install -g bun
 WORKDIR /app
 
-RUN npm install -g bun
-
-# Copy node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-
-# Copy source
 COPY . .
 
-# DATABASE_URL is passed at build time for Prisma generate
 ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
-# ✅ SUBSTITUI o schema ANTES de gerar o client
+# CRITICAL: Swap to MySQL schema BEFORE generating Prisma Client
+# Prisma Client bakes in the provider at generate time
 RUN mv prisma/schema.mysql.prisma prisma/schema.prisma
 
-# Generate Prisma client (agora com mysql) + build Next.js
 RUN bun run db:generate && \
     bun run build
 
-# ---- Stage 3: Production Runner ----
+# ---- Stage 3: Production ----
 FROM node:20-alpine AS runner
 WORKDIR /app
 
@@ -47,21 +43,32 @@ RUN addgroup --system --gid 1001 nodejs && \
 # Copy built output
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
-# Prisma: schema (já é o mysql) + migrations para runtime
+# Copy Prisma: schema + generated client only (NOT the CLI)
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# Install prisma CLI globally (includes engines, .wasm, etc.)
-RUN npm install -g prisma@6
+# Copy seed script and CSV data for auto-seed
+COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts
+COPY --from=builder /app/upload/itens.csv ./upload/itens.csv
+
+# Create data directories
+RUN mkdir -p /app/data /app/data/uploads /app/data/pdfs /app/upload && \
+    chown -R nextjs:nodejs /app
+
+# Install bun (for seed) and prisma CLI (for db push) globally
+RUN npm install -g bun && npm install -g prisma@6
 
 USER nextjs
-
-HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=20s CMD wget -q -O /dev/null http://localhost:3000/ || exit 1
 
 EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Run pending migrations then start
-CMD ["sh", "-c", "prisma migrate deploy && node server.js"]
+# Copy and set entrypoint
+COPY --chmod=755 docker-entrypoint.sh ./docker-entrypoint.sh
+
+ENTRYPOINT ["./docker-entrypoint.sh"]

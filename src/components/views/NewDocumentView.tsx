@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
-import type { DocumentType, DocumentLanguage, Currency, DocumentItem, Company, Item, ShipmentDetails, FinancialDetails } from "@/lib/types";
+import type { DocumentType, DocumentLanguage, Currency, DocumentItem, Company, Item, ShipmentDetails, FinancialDetails, RecipientInfo } from "@/lib/types";
 import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
 import { NotesForm } from "@/components/shared/NotesForm";
@@ -61,6 +61,26 @@ export function NewDocumentView() {
   const [orderNumber, setOrderNumber] = useState("");
   const [erpDialogOpen, setErpDialogOpen] = useState(false);
   const [erpImporting, setErpImporting] = useState(false);
+  const [recipientInfo, setRecipientInfo] = useState<RecipientInfo>({});
+
+  // Auto-fill recipient info when recipient is selected
+  useEffect(() => {
+    if (recipientId) {
+      const company = recipients.find((c) => c.id === recipientId);
+      if (company) {
+        setRecipientInfo({
+          email: company.email || "",
+          address: company.address || "",
+          city: company.city || "",
+          state: company.state || "",
+          postalCode: company.postalCode || "",
+          country: company.country || "",
+        });
+      }
+    } else {
+      setRecipientInfo({});
+    }
+  }, [recipientId, recipients]);
 
   const { data: companies = [], isLoading: companiesLoading } = useQuery<Company[]>({
     queryKey: ["companies", "all"],
@@ -122,6 +142,7 @@ export function NewDocumentView() {
       notes, contactName: contactName || null, contactPhone: contactPhone || null,
       orderNumber: orderNumber || null,
       customNumber: orderNumber || undefined,
+      recipientInfo: recipientId ? recipientInfo : null,
     });
   };
 
@@ -194,6 +215,14 @@ export function NewDocumentView() {
           language,
           currency,
           dollarExchangeRate,
+          recipientInfo: {
+            email: data.client.email,
+            address: data.client.address,
+            city: data.client.city,
+            state: data.client.state,
+            postalCode: data.client.postalCode,
+            country: data.client.country,
+          },
         }),
       });
 
@@ -361,7 +390,7 @@ export function NewDocumentView() {
       {/* Recipient (manual) */}
       <Card>
         <CardHeader><CardTitle className="text-base">Destinatário</CardTitle></CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {companiesLoading ? (
             <Skeleton className="h-9 w-full" />
           ) : (
@@ -373,6 +402,40 @@ export function NewDocumentView() {
                 ))}
               </SelectContent>
             </Select>
+          )}
+          {recipientId && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Email</Label>
+                <Input placeholder="email@company.com" value={recipientInfo.email || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, email: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Cidade</Label>
+                <Input placeholder="City" value={recipientInfo.city || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, city: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Estado</Label>
+                <Input placeholder="State" value={recipientInfo.state || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, state: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">País</Label>
+                <Input placeholder="Country" value={recipientInfo.country || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, country: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">CEP/ZIP</Label>
+                <Input placeholder="Postal Code" value={recipientInfo.postalCode || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, postalCode: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Endereço</Label>
+                <Input placeholder="Address" value={recipientInfo.address || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, address: e.target.value })} className="h-8 text-sm" />
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

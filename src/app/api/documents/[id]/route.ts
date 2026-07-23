@@ -20,6 +20,7 @@ function serializeDocument(doc: Record<string, unknown>) {
     originProformaId: doc.originProformaId,
     contactName: doc.contactName,
     contactPhone: doc.contactPhone,
+    recipientInfo: doc.recipientInfo ? JSON.parse(doc.recipientInfo as string) : null,
     orderNumber: doc.orderNumber,
     shipmentDetails: doc.shipmentDetails ? JSON.parse(doc.shipmentDetails as string) : null,
     financialDetails: doc.financialDetails ? JSON.parse(doc.financialDetails as string) : null,
@@ -84,6 +85,7 @@ export async function PUT(
     if (body.shipmentDetails !== undefined) updateData.shipmentDetails = JSON.stringify(body.shipmentDetails);
     if (body.financialDetails !== undefined) updateData.financialDetails = JSON.stringify(body.financialDetails);
     if (body.notes !== undefined) updateData.notes = JSON.stringify(body.notes);
+    if (body.recipientInfo !== undefined) updateData.recipientInfo = JSON.stringify(body.recipientInfo);
 
     const updated = await db.document.update({
       where: { id },
@@ -99,6 +101,7 @@ export async function PUT(
     if (body.date !== undefined) syncFields.date = updateData.date;
     if (body.senderId !== undefined) syncFields.senderId = body.senderId;
     if (body.recipientId !== undefined) syncFields.recipientId = body.recipientId;
+    if (body.recipientInfo !== undefined) syncFields.recipientInfo = updateData.recipientInfo;
 
     if (Object.keys(syncFields).length > 0) {
       if (document.documentType === "proforma") {

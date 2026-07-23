@@ -2,15 +2,16 @@
 // INVOICER - Database Seed Script
 // Usage: bun db:seed
 // Reads items from upload/itens.csv
+// Idempotent: skips if data already exists
 // ============================================
 
 import { PrismaClient } from "@prisma/client";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
 const prisma = new PrismaClient();
 
-// ── CSV Parser (handles quoted fields with commas and embedded quotes) ──
+// -- CSV Parser (handles quoted fields with commas and embedded quotes) --
 function parseCSV(text: string): string[][] {
   const lines: string[] = [];
   let current = "";
@@ -29,14 +30,14 @@ function parseCSV(text: string): string[][] {
       lines.push(current);
       current = "";
     } else if (ch === "\r" && !inQuote) {
-      // skip
+      // skip CR
     } else {
       current += ch;
     }
   }
   if (current.trim()) lines.push(current);
 
-  return lines.map((line) => {
+  return lines.map(function (line) {
     const fields: string[] = [];
     let field = "";
     let inQ = false;
@@ -73,7 +74,30 @@ interface CsvItem {
 }
 
 function loadItemsFromCsv(): CsvItem[] {
-  const csvPath = join(process.cwd(), "upload", "itens.csv");
+  const possiblePaths = [
+    join(process.cwd(), "upload", "itens.csv"),
+    "/app/upload/itens.csv",
+    "/app/data/itens.csv",
+    join(process.cwd(), "data", "itens.csv"),
+  ];
+
+  let csvPath: string | null = null;
+  for (var k = 0; k < possiblePaths.length; k++) {
+    if (existsSync(possiblePaths[k])) {
+      csvPath = possiblePaths[k];
+      break;
+    }
+  }
+
+  if (!csvPath) {
+    console.log("[SEED] WARNING: itens.csv not found in any expected path:");
+    for (var w = 0; w < possiblePaths.length; w++) {
+      console.log("  - " + possiblePaths[w]);
+    }
+    return [];
+  }
+
+  console.log("[SEED] Found CSV at: " + csvPath);
   const raw = readFileSync(csvPath, "utf-8");
   const rows = parseCSV(raw);
   const seen = new Map<string, boolean>();
@@ -96,7 +120,7 @@ function loadItemsFromCsv(): CsvItem[] {
     const grossWeight = parseFloat(r[6]) || 0;
     const netWeight = parseFloat(r[7]) || 0;
 
-    items.push({ code, namePt, nameEn, endUse, sterileAtImport, unitValueUsd, grossWeight, netWeight });
+    items.push({ code: code, namePt: namePt, nameEn: nameEn, endUse: endUse, sterileAtImport: sterileAtImport, unitValueUsd: unitValueUsd, grossWeight: grossWeight, netWeight: netWeight });
   }
 
   return items;
@@ -105,76 +129,109 @@ function loadItemsFromCsv(): CsvItem[] {
 async function main() {
   console.log("[SEED] Starting...");
 
-  // ── Companies ──
-  const sender = await prisma.company.create({
-    data: {
-      name: "Brazil Export Corp.",
-      type: "sender",
-      contactName: "Carlos Silva",
-      address: "Av. Paulista, 1000",
-      city: "São Paulo",
-      postalCode: "01310-100",
-      state: "SP",
-      country: "Brazil",
-      email: "export@brazilexport.com",
-      phone: "+55 11 3000-0001",
-      cnpj: "12.345.678/0001-90",
-      stateRegistration: "123.456.789.000",
-      isDefault: true,
-      bankDetails:
-        "Bank: Banco do Brasil | SWIFT: BRASBRRJ | Account: 12345-6 | Ag: 0001",
-      midCode: "BR-MID-001",
-    },
-  });
-  console.log(`[SEED] Sender: ${sender.name}`);
+  var dbUrl = process.env.DATABASE_URL || "";
+  console.log("[SEED] Database: " + dbUrl.substring(0, 40) + "...");
 
-  const recipient = await prisma.company.create({
-    data: {
-      name: "Global Medical Imports Inc.",
-      type: "recipient",
-      contactName: "John Smith",
-      address: "123 Medical Drive, Suite 400",
-      city: "Miami",
-      postalCode: "33101",
-      state: "FL",
-      country: "United States",
-      email: "purchasing@globalmedical.com",
-      phone: "+1 305-555-0100",
-    },
-  });
-  console.log(`[SEED] Recipient: ${recipient.name}`);
+  // -- Check if seed already ran (idempotent) --
+  const existingItems = await prisma.item.count();
+  const existingCompanies = await prisma.company.count();
+  console.log("[SEED] Current state: " + existingCompanies + " companies, " + existingItems + " items");
 
-  // ── Items from CSV ──
-  const csvItems = loadItemsFromCsv();
-  console.log(`[SEED] Loaded ${csvItems.length} items from CSV`);
+  // -- Companies (only if none exist) --
+  if (existingCompanies === 0) {
+    console.log("[SEED] Creating default companies...");
 
-  let created = 0;
-  for (const item of csvItems) {
-    await prisma.item.create({
+    const sender = await prisma.company.create({
       data: {
-        code: item.code,
-        namePt: item.namePt,
-        nameEn: item.nameEn,
-        unitValueUsd: item.unitValueUsd,
-        grossWeight: item.grossWeight,
-        netWeight: item.netWeight,
-        endUse: item.endUse || null,
-        sterileAtImport: item.sterileAtImport,
+        name: "Brazil Export Corp.",
+        type: "sender",
+        contactName: "Carlos Silva",
+        address: "Av. Paulista, 1000",
+        city: "Sao Paulo",
+        postalCode: "01310-100",
+        state: "SP",
+        country: "Brazil",
+        email: "export@brazilexport.com",
+        phone: "+55 11 3000-0001",
+        cnpj: "12.345.678/0001-90",
+        stateRegistration: "123.456.789.000",
+        isDefault: true,
+        bankDetails: "Bank: Banco do Brasil | SWIFT: BRASBRRJ | Account: 12345-6 | Ag: 0001",
+        midCode: "BR-MID-001",
       },
     });
-    created++;
+    console.log("[SEED] Created sender: " + sender.name);
+
+    const recipient = await prisma.company.create({
+      data: {
+        name: "Global Medical Imports Inc.",
+        type: "recipient",
+        contactName: "John Smith",
+        address: "123 Medical Drive, Suite 400",
+        city: "Miami",
+        postalCode: "33101",
+        state: "FL",
+        country: "United States",
+        email: "purchasing@globalmedical.com",
+        phone: "+1 305-555-0100",
+      },
+    });
+    console.log("[SEED] Created recipient: " + recipient.name);
+  } else {
+    console.log("[SEED] Companies already exist, skipping.");
   }
 
-  const zeroPrice = csvItems.filter((i) => i.unitValueUsd === 0).length;
-  console.log(`[SEED] Created ${created} items (${zeroPrice} with zero price)`);
+  // -- Items from CSV (only if none exist) --
+  if (existingItems === 0) {
+    const csvItems = loadItemsFromCsv();
+    if (csvItems.length === 0) {
+      console.log("[SEED] No CSV items loaded. Skipping item seed.");
+    } else {
+      console.log("[SEED] Loaded " + csvItems.length + " items from CSV, inserting...");
 
-  console.log(
-    `[SEED] Done! ${await prisma.company.count()} companies, ${await prisma.item.count()} items`,
-  );
+      var BATCH_SIZE = 50;
+      var created = 0;
+
+      for (let i = 0; i < csvItems.length; i += BATCH_SIZE) {
+        const batch = csvItems.slice(i, i + BATCH_SIZE);
+        await prisma.item.createMany({
+          data: batch.map(function (item) {
+            return {
+              code: item.code,
+              namePt: item.namePt,
+              nameEn: item.nameEn,
+              unitValueUsd: item.unitValueUsd,
+              grossWeight: item.grossWeight,
+              netWeight: item.netWeight,
+              endUse: item.endUse || null,
+              sterileAtImport: item.sterileAtImport,
+            };
+          }),
+          skipDuplicates: true,
+        });
+        created += batch.length;
+        console.log("[SEED] Inserted " + created + "/" + csvItems.length + " items...");
+      }
+      console.log("[SEED] Done! " + created + " items inserted.");
+    }
+  } else {
+    console.log("[SEED] " + existingItems + " items already exist, skipping item seed.");
+  }
+
+  // -- Mark seed as complete --
+  await prisma.appSetting.upsert({
+    where: { key: "seed_version" },
+    update: { value: "1" },
+    create: { key: "seed_version", value: "1" },
+  });
+
+  const totalCompanies = await prisma.company.count();
+  const totalItems = await prisma.item.count();
+  console.log("[SEED] Complete! " + totalCompanies + " companies, " + totalItems + " items in database.");
   await prisma.$disconnect();
 }
 
-main().catch(async (e) => {
+main().catch(async function (e) {
   console.error("[SEED] ERROR:", e);
   await prisma.$disconnect();
   process.exit(1);

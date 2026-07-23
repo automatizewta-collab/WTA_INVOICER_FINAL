@@ -1,0 +1,47 @@
+# =============================================
+# INVOICER - MySQL Production Setup
+# Uses MySQL 8.0 as the database backend
+# Auto-seeds 452 products on first boot
+# =============================================
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: invoicer-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-invoicer}
+      MYSQL_USER: ${MYSQL_USER:-invoicer}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-invoicerpassword}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  invoicer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DATABASE_URL: mysql://${MYSQL_USER:-invoicer}:${MYSQL_PASSWORD:-invoicerpassword}@mysql:3306/${MYSQL_DATABASE:-invoicer}
+    container_name: invoicer-app
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      - DATABASE_URL=mysql://${MYSQL_USER:-invoicer}:${MYSQL_PASSWORD:-invoicerpassword}@mysql:3306/${MYSQL_DATABASE:-invoicer}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-to-a-random-32-char-string}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+    driver: local

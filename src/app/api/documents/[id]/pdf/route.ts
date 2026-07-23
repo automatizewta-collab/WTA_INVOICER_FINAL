@@ -157,18 +157,30 @@ function buildPdfHtml(
     if (sender.cnpj) senderInfoHtml += "<br>CNPJ: " + esc(sender.cnpj);
   }
 
+  // Parse recipientInfo overrides
+  let recipientOverrides: Record<string, string> = {};
+  try { recipientOverrides = JSON.parse(String(document.recipientInfo || "{}")); } catch { /* empty */ }
+
   // ── Recipient block ──
   let recipientHtml = "";
+  const rEmail = recipientOverrides.email || (recipient?.email || "");
+  const rAddress = recipientOverrides.address || (recipient?.address || "");
+  const rCity = recipientOverrides.city || (recipient?.city || "");
+  const rState = recipientOverrides.state || (recipient?.state || "");
+  const rPostalCode = recipientOverrides.postalCode || (recipient?.postalCode || "");
+  const rCountry = recipientOverrides.country || (recipient?.country || "");
+
   if (recipient) {
     recipientHtml =
       '<div style="padding:10px 14px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px">' +
       "<strong>" + (isEs ? "Destinatario" : "Ship To") + ":</strong><br>" +
       esc(recipient.name) + "<br>" +
-      esc(recipient.address || "") + "<br>" +
-      esc(recipient.city || "") + " " + esc(recipient.state || "") + " " + esc(recipient.postalCode || "") + "<br>" +
-      esc(recipient.country || "") +
+      esc(rAddress) + "<br>" +
+      esc(rCity) + " " + esc(rState) + " " + esc(rPostalCode) + "<br>" +
+      esc(rCountry) +
       (doc.contactName ? "<br>Contact: " + esc(doc.contactName) : "") +
       (doc.contactPhone ? " | " + esc(doc.contactPhone) : "") +
+      (rEmail ? "<br>" + esc(rEmail) : "") +
       "</div>";
   }
 
@@ -330,6 +342,7 @@ export async function POST(
       financialDetails: parsedFinancial,
       contactName: document.contactName,
       contactPhone: document.contactPhone,
+      recipientInfo: document.recipientInfo ? JSON.parse(String(document.recipientInfo)) : {},
       showEndUseColumn: document.showEndUseColumn,
       showSterileColumn: document.showSterileColumn,
     };

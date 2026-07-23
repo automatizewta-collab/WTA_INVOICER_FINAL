@@ -57,6 +57,15 @@ export interface FinancialDetails {
   total_value: number;
 }
 
+export interface RecipientInfo {
+  email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+}
+
 export interface DocumentWithRelations {
   id: string;
   documentType: DocumentType;
@@ -75,6 +84,7 @@ export interface DocumentWithRelations {
   originProformaId: string | null;
   contactName: string | null;
   contactPhone: string | null;
+  recipientInfo: RecipientInfo | null;
   orderNumber: string | null;
   shipmentDetails: ShipmentDetails | null;
   financialDetails: FinancialDetails | null;

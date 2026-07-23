@@ -29,6 +29,7 @@ import type {
   FinancialDetails,
   Company,
   Item,
+  RecipientInfo,
 } from "@/lib/types";
 import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
@@ -75,6 +76,7 @@ export function EditDocumentView() {
   const [shipmentDetails, setShipmentDetails] = useState<ShipmentDetails>(emptyShipment);
   const [financialDetails, setFinancialDetails] = useState<FinancialDetails>(emptyFinancial);
   const [notes, setNotes] = useState<string[]>([]);
+  const [recipientInfo, setRecipientInfo] = useState<RecipientInfo>({});
 
   const { data: doc, isLoading: docLoading } = useQuery<DocumentWithRelations>({
     queryKey: ["document", editDocumentId],
@@ -116,7 +118,8 @@ export function EditDocumentView() {
       setItems(Array.isArray(doc.items) ? doc.items : []),
       setShipmentDetails({ ...emptyShipment, ...doc.shipmentDetails, boxes: Array.isArray(doc.shipmentDetails?.boxes) ? doc.shipmentDetails.boxes : [] }),
       setFinancialDetails({ ...emptyFinancial, ...doc.financialDetails }),
-      setNotes(Array.isArray(doc.notes) ? doc.notes : [])));
+      setNotes(Array.isArray(doc.notes) ? doc.notes : []),
+      setRecipientInfo(doc.recipientInfo || {})));
     }
   }, [doc]);
 
@@ -150,6 +153,7 @@ export function EditDocumentView() {
           showSterileColumn, showEndUseColumn, shipmentDetails,
           financialDetails: { ...financialDetails, total_value: totalValue },
           notes, status: "issued",
+          recipientInfo: recipientId ? recipientInfo : null,
         }),
       });
       // Then issue (cascade)
@@ -188,6 +192,7 @@ export function EditDocumentView() {
       shipmentDetails,
       financialDetails: { ...financialDetails, total_value: totalValue },
       notes,
+      recipientInfo: recipientId ? recipientInfo : null,
     });
   };
 
@@ -330,7 +335,7 @@ export function EditDocumentView() {
       {/* Companies */}
       <Card>
         <CardHeader><CardTitle className="text-base">Empresas</CardTitle></CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Remetente *</Label>
@@ -365,6 +370,40 @@ export function EditDocumentView() {
               )}
             </div>
           </div>
+          {recipientId && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Email</Label>
+                <Input placeholder="email@company.com" value={recipientInfo.email || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, email: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Cidade</Label>
+                <Input placeholder="City" value={recipientInfo.city || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, city: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Estado</Label>
+                <Input placeholder="State" value={recipientInfo.state || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, state: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">País</Label>
+                <Input placeholder="Country" value={recipientInfo.country || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, country: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">CEP/ZIP</Label>
+                <Input placeholder="Postal Code" value={recipientInfo.postalCode || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, postalCode: e.target.value })} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Endereço</Label>
+                <Input placeholder="Address" value={recipientInfo.address || ""}
+                  onChange={(e) => setRecipientInfo({ ...recipientInfo, address: e.target.value })} className="h-8 text-sm" />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -94,6 +94,7 @@ model Document {
   originProformaId   String?   @map("origin_proforma_id")
   contactName        String?   @map("contact_name")
   contactPhone       String?   @map("contact_phone")
+  recipientInfo      Json?     @map("recipient_info")
   orderNumber        String?   @map("order_number")
   shipmentDetails    Json?     @map("shipment_details")
   financialDetails   Json?     @map("financial_details")
