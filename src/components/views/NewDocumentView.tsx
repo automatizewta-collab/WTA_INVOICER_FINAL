@@ -21,6 +21,7 @@ import type { DocumentType, DocumentLanguage, Currency, DocumentItem, Company, I
 import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
 import { NotesForm } from "@/components/shared/NotesForm";
+import { FinancialSummary } from "@/components/shared/FinancialSummary";
 import { apiFetch } from "@/lib/utils";
 import { ArrowLeft, Save, Send, Database } from "lucide-react";
 import { ErpImportDialog } from "@/components/shared/ErpImportDialog";
@@ -514,20 +515,7 @@ export function NewDocumentView() {
               )}
             </div>
           </div>
-          <div className="flex justify-end">
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Total</p>
-              <p className="text-2xl font-bold">{currency} {calculateTotal(items, financialDetails).toFixed(2)}</p>
-              {dollarExchangeRate && dollarExchangeRate > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  R$ {calculateTotal(items, financialDetails).toFixed(2)} × {dollarExchangeRate} ={" "}
-                  <span className="font-medium text-foreground">
-                    R$ {(calculateTotal(items, financialDetails) * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </span>
-                </p>
-              )}
-            </div>
-          </div>
+          <FinancialSummary items={items} financial={financialDetails} currency={currency} dollarExchangeRate={dollarExchangeRate} />
         </CardContent>
       </Card>
 

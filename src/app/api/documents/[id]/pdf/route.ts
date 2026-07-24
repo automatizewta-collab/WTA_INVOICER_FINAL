@@ -76,10 +76,10 @@ function buildPdfHtml(
 
     rows.push(
       "<tr>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">' + (i + 1) + "</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(item.htsus_code) + "</td>" +
+      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(item.code || "") + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(name) + "</td>" +
       (doc.showEndUseColumn ? '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">' + esc(endUse) + "</td>" : '') +
+      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(item.htsus_code) + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">' + qty + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">$' + price.toFixed(2) + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">' + disc + "%</td>" +
@@ -259,9 +259,10 @@ function buildPdfHtml(
     '<hr class="separator">' +
     partyRowHtml +
     '<table style="font-size:11px"><thead><tr>' +
-    "<th>#</th><th>" + htsusTitle + "</th>" +
+    "<th>" + (isEs ? "C\u00f3digo del Producto" : "Product Code") + "</th>" +
     "<th>" + (isEs ? "Descripci\u00f3n" : "Description") + "</th>" +
     (doc.showEndUseColumn ? "<th>" + (isEs ? "Uso Final" : "End Use") + "</th>" : "") +
+    "<th>" + htsusTitle + "</th>" +
     '<th style="text-align:center">Qty</th>' +
     '<th style="text-align:right">Unit Price</th>' +
     '<th style="text-align:center">Disc.</th>' +
@@ -310,6 +311,7 @@ export async function POST(
         if (catalog) {
           return {
             ...item,
+            code: catalog.code || item.code || "",
             name_pt: catalog.namePt,
             name_en: catalog.nameEn,
             name_es: catalog.nameEs || catalog.nameEn,
@@ -318,7 +320,7 @@ export async function POST(
             htsus_code: catalog.htsusCode || item.htsus_code,
           };
         }
-        return item;
+        return { ...item, code: item.code || "" };
       });
     }
 

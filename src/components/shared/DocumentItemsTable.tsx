@@ -117,7 +117,7 @@ export function DocumentItemsTable({
             <TableRow>
               <TableHead className="w-10">#</TableHead>
               <TableHead className="min-w-[90px]">Código</TableHead>
-              <TableHead className="min-w-[180px]">Descrição (PT)</TableHead>
+              <TableHead className="min-w-[200px]">Descrição (PT)</TableHead>
               <TableHead className="w-20">Qtd</TableHead>
               <TableHead className="w-28">Preço USD</TableHead>
               {showBrl && <TableHead className="w-28">Preço BRL</TableHead>}
@@ -178,7 +178,7 @@ export function DocumentItemsTable({
                         <SelectContent>
                           {catalogItems.map((ci) => (
                             <SelectItem key={ci.id} value={ci.id}>
-                              {ci.code} - {ci.nameEn || ci.namePt}
+                              {ci.code}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -187,8 +187,8 @@ export function DocumentItemsTable({
                   </TableCell>
 
                   {/* Description — always PT */}
-                  <TableCell className="text-xs max-w-[220px]">
-                    <span className={needsPrice ? "text-amber-700 dark:text-amber-400" : ""}>
+                  <TableCell className="text-xs min-w-[200px] max-w-[280px]">
+                    <span className={"leading-relaxed whitespace-normal block line-clamp-2" + (needsPrice ? " text-amber-700 dark:text-amber-400" : "")}>
                       {description}
                     </span>
                     {needsPrice && (
