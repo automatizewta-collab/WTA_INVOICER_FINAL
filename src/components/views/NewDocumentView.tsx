@@ -473,25 +473,45 @@ export function NewDocumentView() {
         <CardHeader><CardTitle className="text-base">Financial Details</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Desconto (%)</Label>
               <Input type="number" min={0} max={100} value={financialDetails.discount}
                 onChange={(e) => setFinancialDetails({ ...financialDetails, discount: parseFloat(e.target.value) || 0 })} />
+              {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.discount > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  BRL: R$ {(items.reduce((s, i) => s + i.quantity * i.unit_price, 0) * financialDetails.discount / 100 * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Frete</Label>
               <Input type="number" min={0} step="0.01" value={financialDetails.shipping_cost}
                 onChange={(e) => setFinancialDetails({ ...financialDetails, shipping_cost: parseFloat(e.target.value) || 0 })} />
+              {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.shipping_cost > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  BRL: R$ {(financialDetails.shipping_cost * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Seguro</Label>
               <Input type="number" min={0} step="0.01" value={financialDetails.insurance}
                 onChange={(e) => setFinancialDetails({ ...financialDetails, insurance: parseFloat(e.target.value) || 0 })} />
+              {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.insurance > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  BRL: R$ {(financialDetails.insurance * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Taxas Bancárias</Label>
               <Input type="number" min={0} step="0.01" value={financialDetails.bank_fees}
                 onChange={(e) => setFinancialDetails({ ...financialDetails, bank_fees: parseFloat(e.target.value) || 0 })} />
+              {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.bank_fees > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  BRL: R$ {(financialDetails.bank_fees * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex justify-end">
