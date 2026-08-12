@@ -1,75 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { startOfMonth, format, parseISO } from "date-fns";
+import { documentCreateSchema } from "@/lib/document-schemas";
+import { serializeDocument } from "@/lib/serialize-document";
 import { z } from "zod";
-
-const documentCreateSchema = z.object({
-  documentType: z.enum(["proforma", "invoice", "packing_list"]),
-  status: z.enum(["draft", "issued"]).optional().default("draft"),
-  language: z.enum(["en", "es"]).optional().default("en"),
-  date: z.string().optional(),
-  senderId: z.string().min(1),
-  recipientId: z.string().optional().nullable(),
-  items: z.array(z.any()).optional().default([]),
-  dollarExchangeRate: z.number().optional().nullable(),
-  currency: z.enum(["USD", "EUR"]).optional().default("USD"),
-  htsusColumnTitle: z.string().optional().nullable(),
-  showSterileColumn: z.boolean().optional().default(false),
-  showEndUseColumn: z.boolean().optional().default(false),
-  shipmentDetails: z.any().optional().nullable(),
-  financialDetails: z.any().optional().nullable(),
-  notes: z.array(z.string()).optional().default([]),
-  contactName: z.string().optional().nullable(),
-  contactPhone: z.string().optional().nullable(),
-  orderNumber: z.string().optional().nullable(),
-  recipientInfo: z.record(z.string(), z.any()).optional().nullable(),
-  // If provided, used as document number (ERP import)
-  customNumber: z.string().optional(),
-});
-
-function serializeDocument(doc: Record<string, unknown>) {
-  return {
-    id: doc.id,
-    documentType: doc.documentType,
-    status: doc.status,
-    language: doc.language,
-    number: doc.number,
-    date: new Date(doc.date as string).toISOString(),
-    senderId: doc.senderId,
-    recipientId: doc.recipientId,
-    items: JSON.parse(doc.items as string),
-    dollarExchangeRate: doc.dollarExchangeRate,
-    currency: doc.currency,
-    htsusColumnTitle: doc.htsusColumnTitle,
-    showSterileColumn: doc.showSterileColumn,
-    showEndUseColumn: doc.showEndUseColumn,
-    originProformaId: doc.originProformaId,
-    contactName: doc.contactName,
-    contactPhone: doc.contactPhone,
-    recipientInfo: doc.recipientInfo ? JSON.parse(doc.recipientInfo as string) : null,
-    orderNumber: doc.orderNumber,
-    shipmentDetails: doc.shipmentDetails ? JSON.parse(doc.shipmentDetails as string) : null,
-    financialDetails: doc.financialDetails ? JSON.parse(doc.financialDetails as string) : null,
-    notes: doc.notes ? JSON.parse(doc.notes as string) : [],
-    pdfUrl: doc.pdfUrl,
-    createdAt: (doc.createdAt as Date).toISOString(),
-    updatedAt: (doc.updatedAt as Date).toISOString(),
-    sender: (doc.sender as Record<string, unknown>) ? {
-      id: (doc.sender as Record<string, unknown>).id,
-      name: (doc.sender as Record<string, unknown>).name,
-      type: (doc.sender as Record<string, unknown>).type,
-      city: (doc.sender as Record<string, unknown>).city,
-      country: (doc.sender as Record<string, unknown>).country,
-    } : null,
-    recipient: (doc.recipient as Record<string, unknown>) ? {
-      id: (doc.recipient as Record<string, unknown>).id,
-      name: (doc.recipient as Record<string, unknown>).name,
-      type: (doc.recipient as Record<string, unknown>).type,
-      city: (doc.recipient as Record<string, unknown>).city,
-      country: (doc.recipient as Record<string, unknown>).country,
-    } : null,
-  };
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -83,6 +17,9 @@ export async function GET(request: NextRequest) {
     if (type && type !== "all") where.documentType = type;
     if (status && status !== "all") where.status = status;
     if (search) where.number = { contains: search };
+
+    const userId = searchParams.get("userId");
+    if (userId) where.createdById = userId;
 
     const documents = await db.document.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
@@ -106,7 +43,9 @@ export async function GET(request: NextRequest) {
       try {
         const fd = JSON.parse(doc.financialDetails);
         return sum + (fd.total_value || 0);
-      } catch { return sum; }
+      } catch {
+        return sum;
+      }
     }, 0);
 
     return NextResponse.json({
@@ -114,7 +53,6 @@ export async function GET(request: NextRequest) {
       counts: { total, drafts: draftsCount, thisMonth: thisMonthCount, totalValue },
     });
   } catch (error) {
-    console.error("GET /api/documents error:", error);
     return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 });
   }
 }
@@ -136,7 +74,6 @@ export async function POST(request: NextRequest) {
           { status: 409 },
         );
       }
-      console.log(`[DOC] Using custom number: ${number}`);
     } else {
       const yearMonth = format(new Date(), "yyMM");
       const sequence = await db.documentSequence.upsert({
@@ -169,12 +106,14 @@ export async function POST(request: NextRequest) {
       recipientInfo: data.recipientInfo ? JSON.stringify(data.recipientInfo) : null,
       orderNumber: data.orderNumber || null,
       language: data.language,
+      priceList: data.priceList,
+      createdById: body._userId || null,
     };
 
     let results: unknown[] = [];
 
     if (data.documentType === "proforma") {
-      // CASCADE: Always create Proforma + Invoice + Packing List (draft or issued)
+      // CASCADE: Always create Proforma + Invoice + Packing List
       const plFinancial = JSON.stringify({
         discount: 0, shipping_cost: 0, insurance: 0, bank_fees: 0, total_value: 0,
       });
@@ -182,53 +121,26 @@ export async function POST(request: NextRequest) {
 
       const [proforma, invoice, packingList] = await db.$transaction([
         db.document.create({
-          data: {
-            ...baseData,
-            number,
-            documentType: "proforma",
-            status: data.status,
-            financialDetails: invFinancial,
-          },
+          data: { ...baseData, number, documentType: "proforma", status: data.status, financialDetails: invFinancial },
           include: { sender: true, recipient: true },
         }),
         db.document.create({
-          data: {
-            ...baseData,
-            number: `${number}-INV`,
-            documentType: "invoice",
-            status: data.status,
-            financialDetails: invFinancial,
-          },
+          data: { ...baseData, number: `${number}-INV`, documentType: "invoice", status: data.status, financialDetails: invFinancial },
           include: { sender: true, recipient: true },
         }),
         db.document.create({
-          data: {
-            ...baseData,
-            number: `${number}-PL`,
-            documentType: "packing_list",
-            status: data.status,
-            financialDetails: plFinancial,
-            originProformaId: undefined,
-          },
+          data: { ...baseData, number: `${number}-PL`, documentType: "packing_list", status: data.status, financialDetails: plFinancial },
           include: { sender: true, recipient: true },
         }),
       ]);
 
-      // Set origin links
-      await db.document.update({
-        where: { id: invoice.id },
-        data: { originProformaId: proforma.id },
-      });
-      await db.document.update({
-        where: { id: packingList.id },
-        data: { originProformaId: proforma.id },
-      });
+      await db.document.update({ where: { id: invoice.id }, data: { originProformaId: proforma.id } });
+      await db.document.update({ where: { id: packingList.id }, data: { originProformaId: proforma.id } });
 
       results = [proforma, invoice, packingList].map((d) => serializeDocument(d as unknown as Record<string, unknown>));
-      console.log(`[DOC] Created proforma cascade: ${number}, ${number}-INV, ${number}-PL (${data.status})`);
 
     } else if (data.documentType === "invoice") {
-      // CASCADE: Always create Invoice + Packing List (draft or issued)
+      // CASCADE: Always create Invoice + Packing List
       const plFinancial = JSON.stringify({
         discount: 0, shipping_cost: 0, insurance: 0, bank_fees: 0, total_value: 0,
       });
@@ -236,47 +148,24 @@ export async function POST(request: NextRequest) {
 
       const [invoice, packingList] = await db.$transaction([
         db.document.create({
-          data: {
-            ...baseData,
-            number,
-            documentType: "invoice",
-            status: data.status,
-            financialDetails: invFinancial,
-          },
+          data: { ...baseData, number, documentType: "invoice", status: data.status, financialDetails: invFinancial },
           include: { sender: true, recipient: true },
         }),
         db.document.create({
-          data: {
-            ...baseData,
-            number: `${number}-PL`,
-            documentType: "packing_list",
-            status: data.status,
-            financialDetails: plFinancial,
-            originProformaId: undefined,
-          },
+          data: { ...baseData, number: `${number}-PL`, documentType: "packing_list", status: data.status, financialDetails: plFinancial },
           include: { sender: true, recipient: true },
         }),
       ]);
 
-      await db.document.update({
-        where: { id: packingList.id },
-        data: { originProformaId: invoice.id },
-      });
+      await db.document.update({ where: { id: packingList.id }, data: { originProformaId: invoice.id } });
 
       results = [invoice, packingList].map((d) => serializeDocument(d as unknown as Record<string, unknown>));
-      console.log(`[DOC] Created invoice cascade: ${number}, ${number}-PL (${data.status})`);
 
     } else {
       // Packing List only — no cascade
       const plFinancial = data.financialDetails ? JSON.stringify(data.financialDetails) : null;
       const doc = await db.document.create({
-        data: {
-          ...baseData,
-          number,
-          documentType: "packing_list",
-          status: data.status,
-          financialDetails: plFinancial,
-        },
+        data: { ...baseData, number, documentType: "packing_list", status: data.status, financialDetails: plFinancial },
         include: { sender: true, recipient: true },
       });
       results = [serializeDocument(doc as unknown as Record<string, unknown>)];
@@ -285,9 +174,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(results, { status: 201 });
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
+      return NextResponse.json({ error: error.issues[0].message, details: JSON.stringify(error.issues) }, { status: 400 });
     }
-    console.error("POST /api/documents error:", error);
-    return NextResponse.json({ error: "Failed to create document" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[DOC CREATE ERROR]", msg);
+    return NextResponse.json({ error: "Failed to create document", details: msg }, { status: 500 });
   }
 }

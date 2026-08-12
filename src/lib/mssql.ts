@@ -70,10 +70,15 @@ export async function queryErp<T = Record<string, unknown>>(
 
 /**
  * Parse a Brazilian number string ("0,03" or "1.200,50") to float.
+ * Also handles numbers already typed as float (from MSSQL driver).
  */
 export function parseBrNumber(val: unknown): number {
+  if (typeof val === "number") return val;
   if (val === null || val === undefined) return 0;
   const s = String(val).trim();
   if (!s) return 0;
+  // If it looks like a standard number (digits + one dot), parse directly
+  if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+  // Brazilian format: remove thousand dots, replace decimal comma
   return parseFloat(s.replace(/\./g, "").replace(",", "."));
 }

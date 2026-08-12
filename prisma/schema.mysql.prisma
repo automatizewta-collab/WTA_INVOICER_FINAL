@@ -1,6 +1,6 @@
 // ============================================
 // INVOICER - MySQL Production Schema
-// Copy this to prisma/schema.prisma when using MySQL
+// This file is swapped in by Dockerfile at build time
 // Run: DATABASE_URL="mysql://..." npx prisma db push
 // ============================================
 
@@ -15,17 +15,18 @@ datasource db {
 
 // ============================================
 // INVOICER - Commercial Document Management
-// MySQL optimized variant
 // ============================================
 
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String?
-  role         String   @default("editor")
+  role         String   @default("logistica")
   passwordHash String?
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+
+  documents    Document[]
 
   @@map("users")
 }
@@ -46,7 +47,7 @@ model Company {
   stateRegistration String?  @map("state_registration")
   isDefault         Boolean  @default(false) @map("is_default")
   logoUrl           String?  @map("logo_url")
-  bankDetails       String?  @map("bank_details")
+  bankDetails       String?  @map("bank_details") @db.Text
   midCode           String?  @map("mid_code")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -58,53 +59,57 @@ model Company {
 }
 
 model Item {
-  id               String   @id @default(cuid())
-  code             String
-  namePt           String   @map("name_pt")
-  nameEn           String   @map("name_en")
-  nameEs           String?  @map("name_es")
-  unitValueUsd     Float    @map("unit_value_usd")
-  grossWeight      Float    @map("gross_weight")
-  netWeight        Float    @map("net_weight")
-  htsusCode        String?  @map("htsus_code")
-  endUse           String?  @map("end_use")
-  endUseEs         String?  @map("end_use_es")
-  sterileAtImport  String   @default("NO") @map("sterile_at_import")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id                    String   @id @default(cuid())
+  code                  String
+  namePt                String   @map("name_pt")
+  nameEn                String   @map("name_en")
+  nameEs                String?  @map("name_es")
+  unitValueUsd          Float    @map("unit_value_usd")
+  unitValueUsdCommercial Float?   @map("unit_value_usd_commercial")
+  grossWeight           Float    @map("gross_weight")
+  netWeight             Float    @map("net_weight")
+  htsusCode             String?  @map("htsus_code")
+  endUse                String?  @map("end_use")
+  endUseEs              String?  @map("end_use_es")
+  sterileAtImport       String   @default("NO") @map("sterile_at_import")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
   @@map("items")
 }
 
 model Document {
-  id                 String    @id @default(cuid())
-  documentType       String    @map("document_type")
-  status             String    @default("draft")
-  language           String    @default("en")
-  number             String    @unique
-  date               DateTime  @map("date")
-  senderId           String    @map("sender_id")
-  recipientId        String?   @map("recipient_id")
-  items              Json      @default("[]")
-  dollarExchangeRate  Float?   @map("dollar_exchange_rate")
-  currency           String    @default("USD")
-  htsusColumnTitle   String?   @map("htsus_column_title")
-  showSterileColumn  Boolean   @default(false) @map("show_sterile_column")
-  showEndUseColumn   Boolean   @default(false) @map("show_end_use_column")
-  originProformaId   String?   @map("origin_proforma_id")
-  contactName        String?   @map("contact_name")
-  contactPhone       String?   @map("contact_phone")
-  recipientInfo      Json?     @map("recipient_info")
-  orderNumber        String?   @map("order_number")
-  shipmentDetails    Json?     @map("shipment_details")
-  financialDetails   Json?     @map("financial_details")
-  notes              Json      @default("[]")
-  pdfUrl             String?   @map("pdf_url")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(cuid())
+  documentType      String    @map("document_type")
+  status            String    @default("draft")
+  language          String    @default("en")
+  number            String    @unique
+  date              DateTime  @map("date")
+  senderId          String    @map("sender_id")
+  recipientId       String?   @map("recipient_id")
+  items             String    @default("[]") @db.MediumText
+  dollarExchangeRate Float?   @map("dollar_exchange_rate")
+  currency          String    @default("USD")
+  htsusColumnTitle  String?   @map("htsus_column_title")
+  showSterileColumn Boolean   @default(false) @map("show_sterile_column")
+  showEndUseColumn  Boolean   @default(false) @map("show_end_use_column")
+  originProformaId  String?   @map("origin_proforma_id")
+  contactName       String?   @map("contact_name")
+  contactPhone      String?   @map("contact_phone")
+  recipientInfo     String?   @map("recipient_info")
+  orderNumber       String?   @map("order_number")
+  priceList         String    @default("logistics") @map("price_list")
+  createdById       String?   @map("created_by_id")
+  shipmentDetails   String?   @map("shipment_details") @db.Text
+  financialDetails  String?   @map("financial_details") @db.Text
+  notes             String?   @default("[]") @db.Text
+  pdfUrl            String?   @map("pdf_url")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   sender    Company  @relation("SenderDocuments", fields: [senderId], references: [id])
   recipient Company? @relation("RecipientDocuments", fields: [recipientId], references: [id])
+  createdBy  User?    @relation(fields: [createdById], references: [id])
 
   @@map("documents")
 }

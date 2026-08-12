@@ -17,12 +17,12 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
-import type { DocumentType, DocumentLanguage, Currency, DocumentItem, Company, Item, ShipmentDetails, FinancialDetails, RecipientInfo } from "@/lib/types";
+import type { DocumentType, DocumentLanguage, Currency, DocumentItem, Company, Item, ShipmentDetails, FinancialDetails, RecipientInfo, PriceList } from "@/lib/types";
 import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
 import { NotesForm } from "@/components/shared/NotesForm";
-import { FinancialSummary } from "@/components/shared/FinancialSummary";
 import { apiFetch } from "@/lib/utils";
+import { calcTotal, calcBrl, fmtBrl, calcSubtotal } from "@/lib/document-calculations";
 import { ArrowLeft, Save, Send, Database } from "lucide-react";
 import { ErpImportDialog } from "@/components/shared/ErpImportDialog";
 
@@ -34,15 +34,11 @@ const emptyFinancial: FinancialDetails = {
   discount: 0, shipping_cost: 0, insurance: 0, bank_fees: 0, total_value: 0,
 };
 
-function calculateTotal(items: DocumentItem[], financial: FinancialDetails): number {
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price * (1 - item.discount / 100), 0);
-  return subtotal * (1 - (financial.discount || 0) / 100) + (financial.shipping_cost || 0) + (financial.insurance || 0) + (financial.bank_fees || 0);
-}
-
 export function NewDocumentView() {
   const navigate = useAppStore((s) => s.navigate);
   const queryClient = useQueryClient();
 
+  const [priceList, setPriceList] = useState<PriceList>("logistics");
   const [documentType, setDocumentType] = useState<DocumentType>("proforma");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [language, setLanguage] = useState<DocumentLanguage>("en");
@@ -134,10 +130,11 @@ export function NewDocumentView() {
     onError: () => toast.error("Failed to create document"),
   });
 
+  const userId = useAppStore((s) => s.userId);
   const handleSubmit = (status: "draft" | "issued") => {
     if (!senderId) { toast.error("Selecione o remetente"); return; }
     if (items.length === 0) { toast.error("Adicione pelo menos um item"); return; }
-    const totalValue = calculateTotal(items, financialDetails);
+    const totalValue = calcTotal(items, financialDetails);
     createMutation.mutate({
       documentType, status, language, date, senderId,
       recipientId: recipientId || null, items, dollarExchangeRate, currency,
@@ -148,6 +145,8 @@ export function NewDocumentView() {
       orderNumber: orderNumber || null,
       customNumber: orderNumber || undefined,
       recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
+      priceList,
+      _userId: userId,
     });
   };
 
@@ -360,7 +359,17 @@ export function NewDocumentView() {
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label>Lista de Preço</Label>
+              <Select value={priceList} onValueChange={(v) => setPriceList(v as PriceList)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="logistics">Logística</SelectItem>
+                  <SelectItem value="commercial">Comercial</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Cotação USD</Label>
               <Input type="number" step="0.01" placeholder="ex: 5.25"
@@ -455,6 +464,7 @@ export function NewDocumentView() {
               showSterileColumn={showSterileColumn}
               htsusColumnTitle={htsusColumnTitle || undefined}
               dollarExchangeRate={dollarExchangeRate}
+              priceList={priceList}
               erpMode={false}
             />
           )}
@@ -480,7 +490,7 @@ export function NewDocumentView() {
                 onChange={(e) => setFinancialDetails({ ...financialDetails, discount: parseFloat(e.target.value) || 0 })} />
               {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.discount > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  BRL: R$ {(items.reduce((s, i) => s + i.quantity * i.unit_price, 0) * financialDetails.discount / 100 * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  BRL: {fmtBrl(calcBrl(calcSubtotal(items) * financialDetails.discount / 100, dollarExchangeRate))}
                 </p>
               )}
             </div>
@@ -490,7 +500,7 @@ export function NewDocumentView() {
                 onChange={(e) => setFinancialDetails({ ...financialDetails, shipping_cost: parseFloat(e.target.value) || 0 })} />
               {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.shipping_cost > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  BRL: R$ {(financialDetails.shipping_cost * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  BRL: {fmtBrl(calcBrl(financialDetails.shipping_cost, dollarExchangeRate))}
                 </p>
               )}
             </div>
@@ -500,7 +510,7 @@ export function NewDocumentView() {
                 onChange={(e) => setFinancialDetails({ ...financialDetails, insurance: parseFloat(e.target.value) || 0 })} />
               {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.insurance > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  BRL: R$ {(financialDetails.insurance * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  BRL: {fmtBrl(calcBrl(financialDetails.insurance, dollarExchangeRate))}
                 </p>
               )}
             </div>
@@ -510,12 +520,23 @@ export function NewDocumentView() {
                 onChange={(e) => setFinancialDetails({ ...financialDetails, bank_fees: parseFloat(e.target.value) || 0 })} />
               {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.bank_fees > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  BRL: R$ {(financialDetails.bank_fees * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  BRL: {fmtBrl(calcBrl(financialDetails.bank_fees, dollarExchangeRate))}
                 </p>
               )}
             </div>
           </div>
-          <FinancialSummary items={items} financial={financialDetails} currency={currency} dollarExchangeRate={dollarExchangeRate} />
+          <div className="flex justify-end">
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">Total</p>
+              <p className="text-2xl font-bold">{currency} {calcTotal(items, financialDetails).toFixed(2)}</p>
+              {dollarExchangeRate && dollarExchangeRate > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  BRL: {fmtBrl(calcBrl(calcTotal(items, financialDetails), dollarExchangeRate))}
+                  <span className="text-xs ml-1">({dollarExchangeRate})</span>
+                </p>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

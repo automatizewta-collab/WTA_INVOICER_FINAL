@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { serializeDocument } from "@/lib/serialize-document";
 
 export async function POST(
   _req: NextRequest,
@@ -48,15 +49,14 @@ export async function POST(
 
     // ── Check if child documents already exist ──
     const existingInv = doc.documentType === "proforma"
-      ? await db.document.findUnique({ where: { number: `${doc.number}-INV` } })
+      ? await db.document.findUnique({ where: { number: doc.number + "-INV" } })
       : null;
     const existingPl = await db.document.findUnique({
-      where: { number: `${doc.number}-PL` },
+      where: { number: doc.number + "-PL" },
     });
 
     if (doc.documentType === "proforma") {
       if (existingInv && existingPl) {
-        // Children already exist → just update their status to issued
         const [updatedInv, updatedPl] = await db.$transaction([
           db.document.update({
             where: { id: existingInv.id },
@@ -70,9 +70,7 @@ export async function POST(
           }),
         ]);
         results.push(updatedInv, updatedPl);
-        console.log(`[DOC] Issued proforma ${doc.number} → updated existing children to issued`);
       } else {
-        // Children don't exist → create them (legacy path)
         const baseData = {
           date: doc.date,
           senderId: doc.senderId,
@@ -90,6 +88,7 @@ export async function POST(
           recipientInfo: doc.recipientInfo,
           orderNumber: doc.orderNumber,
           language: doc.language,
+          priceList: doc.priceList,
           status: "issued" as const,
         };
 
@@ -100,44 +99,28 @@ export async function POST(
 
         const [invoice, packingList] = await db.$transaction([
           db.document.create({
-            data: {
-              ...baseData,
-              number: `${doc.number}-INV`,
-              documentType: "invoice",
-              financialDetails: invFinancial,
-            },
+            data: { ...baseData, number: doc.number + "-INV", documentType: "invoice", financialDetails: invFinancial },
             include: { sender: true, recipient: true },
           }),
           db.document.create({
-            data: {
-              ...baseData,
-              number: `${doc.number}-PL`,
-              documentType: "packing_list",
-              financialDetails: plFinancial,
-            },
+            data: { ...baseData, number: doc.number + "-PL", documentType: "packing_list", financialDetails: plFinancial },
             include: { sender: true, recipient: true },
           }),
         ]);
 
         await db.document.update({ where: { id: invoice.id }, data: { originProformaId: doc.id } });
         await db.document.update({ where: { id: packingList.id }, data: { originProformaId: doc.id } });
-
         results.push(invoice, packingList);
-        console.log(`[DOC] Issued proforma ${doc.number} → created 2 new children`);
       }
-
     } else if (doc.documentType === "invoice") {
       if (existingPl) {
-        // PL already exists → just update status
         const updatedPl = await db.document.update({
           where: { id: existingPl.id },
           data: { status: "issued" },
           include: { sender: true, recipient: true },
         });
         results.push(updatedPl);
-        console.log(`[DOC] Issued invoice ${doc.number} → updated existing PL to issued`);
       } else {
-        // Create PL (legacy path)
         const baseData = {
           date: doc.date,
           senderId: doc.senderId,
@@ -155,6 +138,7 @@ export async function POST(
           recipientInfo: doc.recipientInfo,
           orderNumber: doc.orderNumber,
           language: doc.language,
+          priceList: doc.priceList,
           status: "issued" as const,
         };
 
@@ -163,32 +147,17 @@ export async function POST(
         });
 
         const packingList = await db.document.create({
-          data: {
-            ...baseData,
-            number: `${doc.number}-PL`,
-            documentType: "packing_list",
-            financialDetails: plFinancial,
-          },
+          data: { ...baseData, number: doc.number + "-PL", documentType: "packing_list", financialDetails: plFinancial },
           include: { sender: true, recipient: true },
         });
 
         await db.document.update({ where: { id: packingList.id }, data: { originProformaId: doc.id } });
         results.push(packingList);
-        console.log(`[DOC] Issued invoice ${doc.number} → created new PL`);
       }
     }
 
-    const serialize = (d: typeof issued) => ({
-      id: d.id,
-      documentType: d.documentType,
-      status: d.status,
-      number: d.number,
-      date: new Date(d.date).toISOString(),
-    });
-
-    return NextResponse.json(results.map(serialize));
-  } catch (error) {
-    console.error("[DOC] Issue error:", error);
+    return NextResponse.json(results.map((d) => serializeDocument(d as unknown as Record<string, unknown>)));
+  } catch {
     return NextResponse.json({ error: "Failed to issue document" }, { status: 500 });
   }
 }

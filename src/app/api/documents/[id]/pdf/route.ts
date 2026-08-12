@@ -3,10 +3,17 @@ import { db } from "@/lib/db";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
+import { calcLineTotal } from "@/lib/document-calculations";
 
+/** HTML-escape: handles &, <, >, ", ' */
 function esc(val: unknown): string {
   if (val === null || val === undefined) return "";
-  return String(val).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(val)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
 }
 
 /**
@@ -30,7 +37,7 @@ async function getLogoBase64(
         const b64 = buf.toString("base64");
         return "data:image/png;base64," + b64;
       } catch {
-        /* skip */
+        /* skip unreadable file */
       }
     }
   }
@@ -57,8 +64,8 @@ function buildPdfHtml(
 
   // ── Items table rows ──
   const rows: string[] = [];
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i] as Record<string, unknown>;
+  for (const rawItem of items) {
+    const item = rawItem as Record<string, unknown>;
     const name = isEs
       ? (item.name_es || item.name_en || item.name_pt || "")
       : (item.name_en || item.name_pt || "");
@@ -68,9 +75,7 @@ function buildPdfHtml(
     const qty = Number(item.quantity || 0);
     const price = Number(item.unit_price || 0);
     const disc = Number(item.discount || 0);
-    const lineTotal = qty * price * (1 - disc / 100);
-    const exchangeRate = Number(doc.dollarExchangeRate || 1);
-    const lineTotalBrl = lineTotal * exchangeRate;
+    const lineTotal = calcLineTotal({ quantity: qty, unit_price: price, discount: disc });
     const gw = Number(item.gross_weight || 0);
     const nw = Number(item.net_weight || 0);
 
@@ -78,13 +83,12 @@ function buildPdfHtml(
       "<tr>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(item.code || "") + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(name) + "</td>" +
-      (doc.showEndUseColumn ? '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">' + esc(endUse) + "</td>" : '') +
+      (doc.showEndUseColumn ? '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">' + esc(endUse) + "</td>" : "") +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(item.htsus_code) + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">' + qty + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">$' + price.toFixed(2) + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">' + disc + "%</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">$' + lineTotal.toFixed(2) + "</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;color:#555">R$ ' + lineTotalBrl.toFixed(2) + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">' + gw + "</td>" +
       '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">' + nw + "</td>" +
       "</tr>"
@@ -92,10 +96,11 @@ function buildPdfHtml(
   }
 
   const subtotal = (items as Record<string, unknown>[]).reduce((s, item) => {
-    const qty = Number(item.quantity || 0);
-    const price = Number(item.unit_price || 0);
-    const disc = Number(item.discount || 0);
-    return s + qty * price * (1 - disc / 100);
+    return s + calcLineTotal({
+      quantity: Number(item.quantity || 0),
+      unit_price: Number(item.unit_price || 0),
+      discount: Number(item.discount || 0),
+    });
   }, 0);
 
   // ── Financial summary ──
@@ -120,12 +125,12 @@ function buildPdfHtml(
   let shipmentHtml = "";
   if (sd.carrier) {
     const parts: string[] = [];
-    parts.push((isEs ? "Transportadora" : "Carrier") + ": " + sd.carrier);
-    if (sd.incoterms) parts.push("Incoterms: " + sd.incoterms);
-    if (sd.origin_port) parts.push((isEs ? "Origen" : "Origin") + ": " + sd.origin_port);
-    if (sd.destination_port) parts.push(" \u2192 " + sd.destination_port);
-    if (sd.awb) parts.push("AWB: " + sd.awb);
-    if (sd.shipment_date) parts.push((isEs ? "Fecha" : "Date") + ": " + sd.shipment_date);
+    parts.push((isEs ? "Transportadora" : "Carrier") + ": " + esc(sd.carrier));
+    if (sd.incoterms) parts.push("Incoterms: " + esc(sd.incoterms));
+    if (sd.origin_port) parts.push((isEs ? "Origen" : "Origin") + ": " + esc(sd.origin_port));
+    if (sd.destination_port) parts.push(" \u2192 " + esc(sd.destination_port));
+    if (sd.awb) parts.push("AWB: " + esc(sd.awb));
+    if (sd.shipment_date) parts.push((isEs ? "Fecha" : "Date") + ": " + esc(sd.shipment_date));
 
     shipmentHtml =
       '<div style="margin-top:16px;padding:12px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px">' +
@@ -267,7 +272,6 @@ function buildPdfHtml(
     '<th style="text-align:right">Unit Price</th>' +
     '<th style="text-align:center">Disc.</th>' +
     '<th style="text-align:right">Line Total</th>' +
-    '<th style="text-align:right;color:#555">Valor R$</th>' +
     '<th style="text-align:right">G.W. (kg)</th>' +
     '<th style="text-align:right">N.W. (kg)</th>' +
     "</tr></thead><tbody>" + rows.join("") + "</tbody></table>" +
@@ -328,13 +332,16 @@ export async function POST(
     let parsedNotes: string[] = [];
     try { parsedNotes = JSON.parse(String(document.notes || "[]")); } catch { /* empty */ }
 
-    let parsedShipment: Record<string, string> = {};
+    let parsedShipment: Record<string, unknown> = {};
     try { parsedShipment = JSON.parse(String(document.shipmentDetails || "{}")); } catch { /* empty */ }
 
     let parsedFinancial: Record<string, number> = {};
     try { parsedFinancial = JSON.parse(String(document.financialDetails || "{}")); } catch { /* empty */ }
 
     // Build a clean doc object with parsed fields
+    let parsedRecipientInfo: Record<string, unknown> = {};
+    try { parsedRecipientInfo = document.recipientInfo ? JSON.parse(String(document.recipientInfo)) : {}; } catch { parsedRecipientInfo = {}; }
+
     const docForTemplate: Record<string, unknown> = {
       documentType: document.documentType,
       status: document.status,
@@ -348,7 +355,7 @@ export async function POST(
       financialDetails: parsedFinancial,
       contactName: document.contactName,
       contactPhone: document.contactPhone,
-      recipientInfo: document.recipientInfo ? JSON.parse(String(document.recipientInfo)) : {},
+      recipientInfo: parsedRecipientInfo,
       showEndUseColumn: document.showEndUseColumn,
       showSterileColumn: document.showSterileColumn,
     };
@@ -357,7 +364,6 @@ export async function POST(
     const logoDataUri = await getLogoBase64(
       document.sender as unknown as Record<string, unknown> | null,
     );
-    console.log("[PDF] Logo resolved:", logoDataUri ? "embedded (" + Math.round(logoDataUri.length / 1024) + " KB base64)" : "none");
 
     const html = buildPdfHtml(
       docForTemplate,
@@ -384,9 +390,8 @@ export async function POST(
     });
 
     return NextResponse.json({ success: true, pdfUrl, message: "PDF generated successfully" });
-  } catch (error) {
-    console.error("POST /api/documents/[id]/pdf error:", error);
-    return NextResponse.json({ error: "Failed to generate PDF", details: String(error) }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Failed to generate PDF" }, { status: 500 });
   }
 }
 

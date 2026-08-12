@@ -13,8 +13,7 @@ export async function GET() {
     }
 
     return NextResponse.json(settingsMap);
-  } catch (error) {
-    console.error("GET /api/settings error:", error);
+  } catch {
     return NextResponse.json(
       { error: "Failed to fetch settings" },
       { status: 500 }
@@ -36,8 +35,7 @@ export async function PUT(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("PUT /api/settings error:", error);
+  } catch {
     return NextResponse.json(
       { error: "Failed to update settings" },
       { status: 500 }

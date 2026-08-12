@@ -27,8 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const company = await db.company.findUnique({ where: { id } });
     if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(company);
-  } catch (error) {
-    console.error("GET /api/companies/[id] error:", error);
+  } catch {
     return NextResponse.json({ error: "Failed to fetch company" }, { status: 500 });
   }
 }
@@ -55,7 +54,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
     }
-    console.error("PUT /api/companies/[id] error:", error);
     return NextResponse.json({ error: "Failed to update company" }, { status: 500 });
   }
 }
@@ -70,8 +68,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
     await db.company.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("DELETE /api/companies/[id] error:", error);
+  } catch {
     return NextResponse.json({ error: "Failed to delete company" }, { status: 500 });
   }
 }

@@ -12,8 +12,7 @@ export async function GET(
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
     return NextResponse.json(item);
-  } catch (error) {
-    console.error("GET /api/items/[id] error:", error);
+  } catch {
     return NextResponse.json(
       { error: "Failed to fetch item" },
       { status: 500 }
@@ -52,8 +51,7 @@ export async function PUT(
     });
 
     return NextResponse.json(updated);
-  } catch (error) {
-    console.error("PUT /api/items/[id] error:", error);
+  } catch {
     return NextResponse.json(
       { error: "Failed to update item" },
       { status: 500 }
@@ -73,8 +71,7 @@ export async function DELETE(
     }
     await db.item.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("DELETE /api/items/[id] error:", error);
+  } catch {
     return NextResponse.json(
       { error: "Failed to delete item" },
       { status: 500 }

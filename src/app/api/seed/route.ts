@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { hash } from "bcryptjs";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,12 +9,13 @@ export async function POST(req: NextRequest) {
 
     const companyCount = await db.company.count();
     const itemCount = await db.item.count();
+    const userCount = await db.user.count();
 
-    if (!force && companyCount > 0 && itemCount > 0) {
+    if (!force && companyCount > 0 && itemCount > 0 && userCount > 0) {
       return NextResponse.json({
         success: true,
         message: "Database already seeded. Use ?force=true to re-seed.",
-        existing: { companies: companyCount, items: itemCount },
+        existing: { companies: companyCount, items: itemCount, users: userCount },
       });
     }
 
@@ -23,8 +25,38 @@ export async function POST(req: NextRequest) {
       await db.documentSequence.deleteMany();
       await db.item.deleteMany();
       await db.company.deleteMany();
+      await db.user.deleteMany();
     }
 
+    // ── Users ──
+    const users = await Promise.all([
+      db.user.create({
+        data: {
+          email: "admin@invoicer.com",
+          name: "Administrador",
+          role: "admin",
+          passwordHash: await hash("admin123", 10),
+        },
+      }),
+      db.user.create({
+        data: {
+          email: "logistica@invoicer.com",
+          name: "Logística",
+          role: "logistica",
+          passwordHash: await hash("logistica123", 10),
+        },
+      }),
+      db.user.create({
+        data: {
+          email: "comercial@invoicer.com",
+          name: "Comercial",
+          role: "comercial",
+          passwordHash: await hash("comercial123", 10),
+        },
+      }),
+    ]);
+
+    // ── Companies ──
     const sender = await db.company.create({
       data: {
         name: "Brazil Export Corp.",
@@ -83,6 +115,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: "Seed completed successfully",
       data: {
+        users: users.length,
         companies: 2,
         items: items.length,
         sender: sender.name,
@@ -91,7 +124,6 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("POST /api/seed error:", error);
     return NextResponse.json(
       { error: "Failed to seed database", details: String(error) },
       { status: 500 },

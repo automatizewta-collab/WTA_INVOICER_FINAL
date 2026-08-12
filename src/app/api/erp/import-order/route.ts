@@ -144,12 +144,10 @@ export async function POST(req: NextRequest) {
         netWeight: parseBrNumber(r.PESOLIQUIDO),
         nbm: r.CODIGONBM || "",
       }));
-      console.log(`[ERP] Fetched order ${orderNumber}: ${items.length} items from MSSQL`);
     } else {
       // Mock fallback
       client = getMockData(orderNumber).client;
       items = getMockData(orderNumber).items;
-      console.log(`[ERP] Mock data for order ${orderNumber}: ${items.length} items`);
     }
 
     // ── Match ERP items with Invoicer catalog ──
@@ -173,7 +171,6 @@ export async function POST(req: NextRequest) {
             sterileAtImport: "NO",
           },
         });
-        console.log(`[ERP] Auto-registered item ${item.erpCode}: ${item.erpName}`);
         autoCreatedCodes.push(item.erpCode);
       }
     }
@@ -239,7 +236,6 @@ export async function POST(req: NextRequest) {
       itemsNeedingAttention,
     });
   } catch (error) {
-    console.error("[ERP] Import error:", error);
     return NextResponse.json(
       { error: "Failed to import order from ERP", details: String(error) },
       { status: 500 },

@@ -69,6 +69,8 @@ const statusLabels: Record<string, string> = {
 
 export function DocumentsView() {
   const navigate = useAppStore((s) => s.navigate);
+  const userRole = useAppStore((s) => s.userRole);
+  const userId = useAppStore((s) => s.userId);
   const queryClient = useQueryClient();
 
   const [typeFilter, setTypeFilter] = useState("all");
@@ -85,6 +87,10 @@ export function DocumentsView() {
       if (typeFilter !== "all") params.set("type", typeFilter);
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (search) params.set("search", search);
+      // Non-admin users only see their own documents
+      if (userId && userRole !== "admin") {
+        params.set("userId", userId);
+      }
       return apiFetch<{ documents: DocumentWithRelations[] }>(`/api/documents?${params.toString()}`);
     },
   });
@@ -104,9 +110,16 @@ export function DocumentsView() {
     },
   });
 
-  const generatePdf = (id: string) => {
-    window.open(`/api/documents/${id}/pdf`, "_blank");
-  };
+  const generatePdfMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/documents/${id}/pdf`, { method: "POST" }),
+    onSuccess: () => {
+      toast.success("PDF generation requested");
+    },
+    onError: () => {
+      toast.error("Failed to generate PDF");
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -254,7 +267,7 @@ export function DocumentsView() {
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
-                                generatePdf(doc.id);
+                                generatePdfMutation.mutate(doc.id);
                               }}
                             >
                               <FileDown className="h-4 w-4 mr-2" />

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { parseJsonField } from "@/lib/utils";
 
 export async function POST(
   _request: NextRequest,
@@ -55,11 +54,10 @@ export async function POST(
       document: {
         id: updated.id,
         number: updated.number,
-        items: parseJsonField(updated.items, []),
+        items: JSON.parse(updated.items),
       },
     });
-  } catch (error) {
-    console.error("POST /api/documents/[id]/sync-pl error:", error);
+  } catch {
     return NextResponse.json(
       { error: "Failed to sync Packing List" },
       { status: 500 }

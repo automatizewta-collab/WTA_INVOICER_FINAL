@@ -9,10 +9,12 @@ services:
         DATABASE_URL: mysql://invoicer:${MYSQL_PASSWORD}@invoicer-db:3306/invoicer?charset=utf8mb4
     container_name: invoicer-app
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_PORT:-3003}:3000"
     environment:
       DATABASE_URL: mysql://invoicer:${MYSQL_PASSWORD}@invoicer-db:3306/invoicer?charset=utf8mb4
       NODE_ENV: production
+      NEXTAUTH_SECRET: dev-secret-min-32-chars-long-change-me-ok
+      NEXTAUTH_URL: http://localhost:3003
       MSSQL_HOST: ${MSSQL_HOST:-}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_USER: ${MSSQL_USER:-}
@@ -45,6 +47,7 @@ services:
       retries: 15
       start_period: 30s
     restart: unless-stopped
+
 
 volumes:
   mysql-data:

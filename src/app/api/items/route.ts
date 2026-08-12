@@ -8,6 +8,7 @@ const itemSchema = z.object({
   nameEn: z.string().min(1, "Name (EN) is required"),
   nameEs: z.string().optional().nullable(),
   unitValueUsd: z.number().min(0),
+  unitValueUsdCommercial: z.number().min(0).optional().nullable(),
   grossWeight: z.number().min(0),
   netWeight: z.number().min(0),
   htsusCode: z.string().optional().nullable(),
@@ -45,8 +46,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     return NextResponse.json({ items, total, page, limit });
-  } catch (error) {
-    console.error("GET /api/items error:", error);
+  } catch {
     return NextResponse.json({ error: "Failed to fetch items" }, { status: 500 });
   }
 }
@@ -61,7 +61,6 @@ export async function POST(req: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
     }
-    console.error("POST /api/items error:", error);
     return NextResponse.json({ error: "Failed to create item" }, { status: 500 });
   }
 }

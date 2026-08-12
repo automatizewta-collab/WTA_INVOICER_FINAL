@@ -19,7 +19,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Trash2, ArrowUp, ArrowDown, AlertCircle } from "lucide-react";
-import type { DocumentItem, DocumentLanguage, Item } from "@/lib/types";
+import type { DocumentItem, DocumentLanguage, Item, PriceList } from "@/lib/types";
+import { calcLineTotal, calcBrl, fmtBrl } from "@/lib/document-calculations";
 
 interface DocumentItemsTableProps {
   items: DocumentItem[];
@@ -29,11 +30,8 @@ interface DocumentItemsTableProps {
   showSterileColumn: boolean;
   htsusColumnTitle?: string;
   dollarExchangeRate?: number | null;
+  priceList?: PriceList;
   erpMode?: boolean;
-}
-
-function getLineTotal(item: DocumentItem): number {
-  return item.quantity * item.unit_price * (1 - item.discount / 100);
 }
 
 export function DocumentItemsTable({
@@ -44,6 +42,7 @@ export function DocumentItemsTable({
   showSterileColumn,
   htsusColumnTitle,
   dollarExchangeRate,
+  priceList = "logistics",
   erpMode = false,
 }: DocumentItemsTableProps) {
   const safeItems = Array.isArray(items) ? items : [];
@@ -70,7 +69,6 @@ export function DocumentItemsTable({
     if (target < 0 || target >= safeItems.length) return;
     const updated = [...safeItems];
     [updated[index], updated[target]] = [updated[target], updated[index]];
-    // Re-number
     updated.forEach((item, i) => { item.line_number = i + 1; });
     onChange(updated);
   };
@@ -78,11 +76,14 @@ export function DocumentItemsTable({
   const selectCatalogItem = (index: number, itemId: string) => {
     const catalogItem = catalogItems.find((c) => c.id === itemId);
     if (catalogItem) {
+      const unitPrice = priceList === "commercial" && catalogItem.unitValueUsdCommercial
+        ? catalogItem.unitValueUsdCommercial
+        : catalogItem.unitValueUsd;
       const updated = [...safeItems];
       updated[index] = {
         ...updated[index],
         item_id: catalogItem.id,
-        unit_price: catalogItem.unitValueUsd,
+        unit_price: unitPrice,
         gross_weight: catalogItem.grossWeight,
         net_weight: catalogItem.netWeight,
         htsus_code: catalogItem.htsusCode || "",
@@ -143,17 +144,14 @@ export function DocumentItemsTable({
               </TableRow>
             )}
             {safeItems.map((item, index) => {
-              // Look up catalog by item_id (DB ID) or by code
               const catalogItem = catalogById.get(item.item_id) ||
                 catalogItems.find((c) => c.code === item.item_id);
               const description = catalogItem?.namePt || "";
-
-              // Price warning: no price set
               const needsPrice = !item.unit_price || item.unit_price === 0;
 
-              const unitBrl = showBrl && dollarExchangeRate ? item.unit_price * dollarExchangeRate : 0;
-              const lineTotal = getLineTotal(item);
-              const lineBrl = showBrl && dollarExchangeRate ? lineTotal * dollarExchangeRate : 0;
+              const unitBrl = showBrl && dollarExchangeRate ? calcBrl(item.unit_price, dollarExchangeRate) : 0;
+              const lineTotal = calcLineTotal(item);
+              const lineBrl = showBrl && dollarExchangeRate ? calcBrl(lineTotal, dollarExchangeRate) : 0;
 
               return (
                 <TableRow key={index} className={needsPrice ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
@@ -161,7 +159,6 @@ export function DocumentItemsTable({
                     {item.line_number}
                   </TableCell>
 
-                  {/* Code column */}
                   <TableCell>
                     {erpMode ? (
                       <span className="font-mono text-xs font-medium">
@@ -186,7 +183,6 @@ export function DocumentItemsTable({
                     )}
                   </TableCell>
 
-                  {/* Description — always PT */}
                   <TableCell className="text-xs min-w-[200px] max-w-[280px]">
                     <span className={"leading-relaxed whitespace-normal block line-clamp-2" + (needsPrice ? " text-amber-700 dark:text-amber-400" : "")}>
                       {description}
@@ -209,7 +205,7 @@ export function DocumentItemsTable({
 
                   {showBrl && (
                     <TableCell className="text-xs tabular-nums text-muted-foreground">
-                      {unitBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {fmtBrl(unitBrl)}
                     </TableCell>
                   )}
 
@@ -225,7 +221,7 @@ export function DocumentItemsTable({
 
                   {showBrl && (
                     <TableCell className="text-xs tabular-nums text-muted-foreground">
-                      {lineBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {fmtBrl(lineBrl)}
                     </TableCell>
                   )}
 
@@ -252,7 +248,6 @@ export function DocumentItemsTable({
                     </TableCell>
                   )}
 
-                  {/* Reorder + delete */}
                   {!erpMode ? (
                     <TableCell>
                       <Button type="button" variant="ghost" size="icon" className="h-7 w-7"
@@ -285,19 +280,16 @@ export function DocumentItemsTable({
         <div className="flex justify-end">
           <div className="text-right">
             <p className="text-sm font-medium">
-              Total USD:{" "}
+              Total USD: {" "}
               <span className="text-base font-bold">
-                ${safeItems.reduce((sum, item) => sum + getLineTotal(item), 0).toFixed(2)}
+                ${safeItems.reduce((sum, item) => sum + calcLineTotal(item), 0).toFixed(2)}
               </span>
             </p>
             {showBrl && dollarExchangeRate && (
               <p className="text-sm font-medium text-muted-foreground">
-                Total BRL:{" "}
-                <span className="text-base">
-                  R$ {safeItems.reduce((sum, item) => sum + getLineTotal(item), 0).toFixed(2)} × {dollarExchangeRate} ={" "}
-                  <span className="font-bold text-foreground">
-                    R$ {(safeItems.reduce((sum, item) => sum + getLineTotal(item), 0) * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </span>
+                Total BRL: {" "}
+                <span className="text-base font-bold text-foreground">
+                  {fmtBrl(calcBrl(safeItems.reduce((sum, item) => sum + calcLineTotal(item), 0), dollarExchangeRate))}
                 </span>
               </p>
             )}

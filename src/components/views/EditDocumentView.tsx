@@ -30,12 +30,13 @@ import type {
   Company,
   Item,
   RecipientInfo,
+  PriceList,
 } from "@/lib/types";
 import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
 import { NotesForm } from "@/components/shared/NotesForm";
-import { FinancialSummary } from "@/components/shared/FinancialSummary";
 import { apiFetch } from "@/lib/utils";
+import { calcTotal, calcBrl, fmtBrl, calcSubtotal } from "@/lib/document-calculations";
 import {
   ArrowLeft,
   Save,
@@ -51,11 +52,6 @@ const emptyShipment: ShipmentDetails = {
 const emptyFinancial: FinancialDetails = {
   discount: 0, shipping_cost: 0, insurance: 0, bank_fees: 0, total_value: 0,
 };
-
-function calculateTotal(items: DocumentItem[], financial: FinancialDetails): number {
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price * (1 - item.discount / 100), 0);
-  return subtotal * (1 - (financial.discount || 0) / 100) + (financial.shipping_cost || 0) + (financial.insurance || 0) + (financial.bank_fees || 0);
-}
 
 export function EditDocumentView() {
   const editDocumentId = useAppStore((s) => s.editDocumentId);
@@ -76,6 +72,7 @@ export function EditDocumentView() {
   const [items, setItems] = useState<DocumentItem[]>([]);
   const [shipmentDetails, setShipmentDetails] = useState<ShipmentDetails>(emptyShipment);
   const [financialDetails, setFinancialDetails] = useState<FinancialDetails>(emptyFinancial);
+  const [priceList] = useState<PriceList>("logistics");
   const [notes, setNotes] = useState<string[]>([]);
   const [recipientInfo, setRecipientInfo] = useState<RecipientInfo>({});
 
@@ -120,7 +117,8 @@ export function EditDocumentView() {
       setShipmentDetails({ ...emptyShipment, ...doc.shipmentDetails, boxes: Array.isArray(doc.shipmentDetails?.boxes) ? doc.shipmentDetails.boxes : [] }),
       setFinancialDetails({ ...emptyFinancial, ...doc.financialDetails }),
       setNotes(Array.isArray(doc.notes) ? doc.notes : []),
-      setRecipientInfo(doc.recipientInfo || {})));
+      setRecipientInfo(doc.recipientInfo || {}),
+      setPriceList((doc.priceList || "logistics") as PriceList)));
     }
   }, [doc]);
 
@@ -142,7 +140,7 @@ export function EditDocumentView() {
   const issueMutation = useMutation({
     mutationFn: async () => {
       // First save current changes
-      const totalValue = calculateTotal(items, financialDetails);
+      const totalValue = calcTotal(items, financialDetails);
       await apiFetch(`/api/documents/${editDocumentId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -185,7 +183,7 @@ export function EditDocumentView() {
 
   const handleSave = () => {
     if (!senderId) { toast.error("Selecione o remetente"); return; }
-    const totalValue = calculateTotal(items, financialDetails);
+    const totalValue = calcTotal(items, financialDetails);
     updateMutation.mutate({
       documentType, status: "draft", language, date, senderId,
       recipientId: recipientId || null, items, dollarExchangeRate, currency,
@@ -282,9 +280,15 @@ export function EditDocumentView() {
               <Input value={doc?.number || ""} disabled className="bg-muted" />
             </div>
             <div className="space-y-2">
+              <Label>Lista de Preço</Label>
+              <Input value={priceList === "logistics" ? "Logística" : "Comercial"} disabled className="bg-muted" />
+            </div>
+            <div className="space-y-2">
               <Label>Data</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Idioma</Label>
               <Select value={language} onValueChange={(v) => setLanguage(v as DocumentLanguage)}>
@@ -421,6 +425,7 @@ export function EditDocumentView() {
             showSterileColumn={showSterileColumn}
             htsusColumnTitle={htsusColumnTitle || undefined}
             dollarExchangeRate={dollarExchangeRate}
+            priceList={priceList}
             erpMode={isFromErp}
           />
         </CardContent>
@@ -445,7 +450,7 @@ export function EditDocumentView() {
                 onChange={(e) => setFinancialDetails({ ...financialDetails, discount: parseFloat(e.target.value) || 0 })} />
               {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.discount > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  BRL: R$ {(items.reduce((s, i) => s + i.quantity * i.unit_price, 0) * financialDetails.discount / 100 * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  BRL: {fmtBrl(calcBrl(calcSubtotal(items) * financialDetails.discount / 100, dollarExchangeRate))}
                 </p>
               )}
             </div>
@@ -455,7 +460,7 @@ export function EditDocumentView() {
                 onChange={(e) => setFinancialDetails({ ...financialDetails, shipping_cost: parseFloat(e.target.value) || 0 })} />
               {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.shipping_cost > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  BRL: R$ {(financialDetails.shipping_cost * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  BRL: {fmtBrl(calcBrl(financialDetails.shipping_cost, dollarExchangeRate))}
                 </p>
               )}
             </div>
@@ -465,7 +470,7 @@ export function EditDocumentView() {
                 onChange={(e) => setFinancialDetails({ ...financialDetails, insurance: parseFloat(e.target.value) || 0 })} />
               {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.insurance > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  BRL: R$ {(financialDetails.insurance * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  BRL: {fmtBrl(calcBrl(financialDetails.insurance, dollarExchangeRate))}
                 </p>
               )}
             </div>
@@ -475,12 +480,26 @@ export function EditDocumentView() {
                 onChange={(e) => setFinancialDetails({ ...financialDetails, bank_fees: parseFloat(e.target.value) || 0 })} />
               {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.bank_fees > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  BRL: R$ {(financialDetails.bank_fees * dollarExchangeRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  BRL: {fmtBrl(calcBrl(financialDetails.bank_fees, dollarExchangeRate))}
                 </p>
               )}
             </div>
           </div>
-          <FinancialSummary items={items} financial={financialDetails} currency={currency} dollarExchangeRate={dollarExchangeRate} />
+          <Separator />
+          <div className="flex justify-end">
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">Total</p>
+              <p className="text-2xl font-bold">
+                {currency} {calcTotal(items, financialDetails).toFixed(2)}
+              </p>
+              {dollarExchangeRate && dollarExchangeRate > 0 && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  BRL: {fmtBrl(calcBrl(calcTotal(items, financialDetails), dollarExchangeRate))}
+                  <span className="text-xs ml-1">({dollarExchangeRate})</span>
+                </p>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
