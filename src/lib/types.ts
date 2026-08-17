@@ -7,8 +7,7 @@ export type DocumentStatus = "draft" | "issued";
 export type DocumentLanguage = "en" | "es";
 export type Currency = "USD" | "EUR";
 export type CompanyType = "sender" | "recipient";
-export type UserRole = "admin" | "logistica" | "comercial";
-export type PriceList = "logistics" | "commercial";
+export type UserRole = "admin" | "editor" | "viewer";
 
 export type ViewName =
   | "login"
@@ -18,7 +17,6 @@ export type ViewName =
   | "edit-document"
   | "items"
   | "companies"
-  | "users"
   | "settings";
 
 export interface DocumentItem {
@@ -77,8 +75,6 @@ export interface DocumentWithRelations {
   date: string;
   senderId: string;
   recipientId: string | null;
-  priceList: PriceList;
-  createdById: string | null;
   items: DocumentItem[];
   dollarExchangeRate: number | null;
   currency: Currency;
@@ -129,7 +125,6 @@ export interface Item {
   nameEn: string;
   nameEs: string | null;
   unitValueUsd: number;
-  unitValueUsdCommercial: number | null;
   grossWeight: number;
   netWeight: number;
   htsusCode: string | null;

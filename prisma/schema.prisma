@@ -16,12 +16,10 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String?
-  role         String   @default("logistica")
+  role         String   @default("editor")
   passwordHash String?
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-
-  documents    Document[]
 
   @@map("users")
 }
@@ -59,8 +57,7 @@ model Item {
   namePt           String   @map("name_pt")
   nameEn           String   @map("name_en")
   nameEs           String?  @map("name_es")
-  unitValueUsd           Float    @map("unit_value_usd")
-  unitValueUsdCommercial Float?  @map("unit_value_usd_commercial")
+  unitValueUsd     Float    @map("unit_value_usd")
   grossWeight      Float    @map("gross_weight")
   netWeight        Float    @map("net_weight")
   htsusCode        String?  @map("htsus_code")
@@ -93,8 +90,6 @@ model Document {
   contactPhone       String?   @map("contact_phone")
   recipientInfo      String?   @map("recipient_info")
   orderNumber        String?   @map("order_number")
-  priceList           String    @default("logistics") @map("price_list")
-  createdById         String?   @map("created_by_id")
   shipmentDetails    String?   @map("shipment_details")
   financialDetails   String?   @map("financial_details")
   notes              String?   @default("[]")
@@ -104,7 +99,6 @@ model Document {
 
   sender    Company  @relation("SenderDocuments", fields: [senderId], references: [id])
   recipient Company? @relation("RecipientDocuments", fields: [recipientId], references: [id])
-  createdBy  User?    @relation(fields: [createdById], references: [id])
 
   @@map("documents")
 }

@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Trash2, ArrowUp, ArrowDown, AlertCircle } from "lucide-react";
-import type { DocumentItem, DocumentLanguage, Item, PriceList } from "@/lib/types";
+import type { DocumentItem, DocumentLanguage, Item } from "@/lib/types";
 import { calcLineTotal, calcBrl, fmtBrl } from "@/lib/document-calculations";
 
 interface DocumentItemsTableProps {
@@ -30,7 +30,6 @@ interface DocumentItemsTableProps {
   showSterileColumn: boolean;
   htsusColumnTitle?: string;
   dollarExchangeRate?: number | null;
-  priceList?: PriceList;
   erpMode?: boolean;
 }
 
@@ -42,7 +41,6 @@ export function DocumentItemsTable({
   showSterileColumn,
   htsusColumnTitle,
   dollarExchangeRate,
-  priceList = "logistics",
   erpMode = false,
 }: DocumentItemsTableProps) {
   const safeItems = Array.isArray(items) ? items : [];
@@ -76,14 +74,11 @@ export function DocumentItemsTable({
   const selectCatalogItem = (index: number, itemId: string) => {
     const catalogItem = catalogItems.find((c) => c.id === itemId);
     if (catalogItem) {
-      const unitPrice = priceList === "commercial" && catalogItem.unitValueUsdCommercial
-        ? catalogItem.unitValueUsdCommercial
-        : catalogItem.unitValueUsd;
       const updated = [...safeItems];
       updated[index] = {
         ...updated[index],
         item_id: catalogItem.id,
-        unit_price: unitPrice,
+        unit_price: catalogItem.unitValueUsd,
         gross_weight: catalogItem.grossWeight,
         net_weight: catalogItem.netWeight,
         htsus_code: catalogItem.htsusCode || "",

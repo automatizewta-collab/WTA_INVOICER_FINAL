@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { startOfMonth, format, parseISO } from "date-fns";
 import { documentCreateSchema } from "@/lib/document-schemas";
 import { serializeDocument } from "@/lib/serialize-document";
+import { safeJsonParse } from "@/lib/utils";
 import { z } from "zod";
 
 export async function GET(request: NextRequest) {
@@ -17,9 +18,6 @@ export async function GET(request: NextRequest) {
     if (type && type !== "all") where.documentType = type;
     if (status && status !== "all") where.status = status;
     if (search) where.number = { contains: search };
-
-    const userId = searchParams.get("userId");
-    if (userId) where.createdById = userId;
 
     const documents = await db.document.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
@@ -40,12 +38,8 @@ export async function GET(request: NextRequest) {
       select: { financialDetails: true },
     });
     const totalValue = issuedDocs.reduce((sum, doc) => {
-      try {
-        const fd = JSON.parse(doc.financialDetails);
-        return sum + (fd.total_value || 0);
-      } catch {
-        return sum;
-      }
+      const fd = safeJsonParse(doc.financialDetails) as Record<string, number> | null;
+      return sum + (fd?.total_value || 0);
     }, 0);
 
     return NextResponse.json({
@@ -106,8 +100,6 @@ export async function POST(request: NextRequest) {
       recipientInfo: data.recipientInfo ? JSON.stringify(data.recipientInfo) : null,
       orderNumber: data.orderNumber || null,
       language: data.language,
-      priceList: data.priceList,
-      createdById: body._userId || null,
     };
 
     let results: unknown[] = [];
@@ -174,10 +166,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(results, { status: 201 });
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message, details: JSON.stringify(error.issues) }, { status: 400 });
+      return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
     }
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error("[DOC CREATE ERROR]", msg);
-    return NextResponse.json({ error: "Failed to create document", details: msg }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create document" }, { status: 500 });
   }
 }

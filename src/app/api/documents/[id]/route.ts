@@ -59,7 +59,6 @@ export async function PUT(
     if (data.htsusColumnTitle !== undefined) updateData.htsusColumnTitle = data.htsusColumnTitle;
     if (data.showSterileColumn !== undefined) updateData.showSterileColumn = data.showSterileColumn;
     if (data.showEndUseColumn !== undefined) updateData.showEndUseColumn = data.showEndUseColumn;
-    if (data.priceList !== undefined) updateData.priceList = data.priceList;
     if (data.shipmentDetails !== undefined) updateData.shipmentDetails = JSON.stringify(data.shipmentDetails);
     if (data.financialDetails !== undefined) updateData.financialDetails = JSON.stringify(data.financialDetails);
     if (data.notes !== undefined) updateData.notes = JSON.stringify(data.notes);
@@ -80,7 +79,6 @@ export async function PUT(
     if (data.senderId !== undefined) syncFields.senderId = data.senderId;
     if (data.recipientId !== undefined) syncFields.recipientId = data.recipientId;
     if (data.recipientInfo !== undefined) syncFields.recipientInfo = updateData.recipientInfo;
-    if (data.priceList !== undefined) syncFields.priceList = data.priceList;
 
     if (Object.keys(syncFields).length > 0) {
       if (document.documentType === "proforma") {

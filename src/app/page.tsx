@@ -1,8 +1,8 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
 import { useEffect } from "react";
 import { useAppStore } from "@/lib/store";
+import type { CurrentUser } from "@/lib/store";
 import {
   Sidebar,
   SidebarContent,
@@ -19,9 +19,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { FileText, LayoutDashboard, Package, PlusCircle, Building2, Settings, LogOut, Users } from "lucide-react";
+import { FileText, LayoutDashboard, Package, PlusCircle, Building2, Settings, LogOut } from "lucide-react";
 import { LoginPage } from "@/components/views/LoginView";
 import { DashboardView } from "@/components/views/DashboardView";
 import { DocumentsView } from "@/components/views/DocumentsView";
@@ -30,38 +28,22 @@ import { EditDocumentView } from "@/components/views/EditDocumentView";
 import { ItemsView } from "@/components/views/ItemsView";
 import { CompaniesView } from "@/components/views/CompaniesView";
 import { SettingsView } from "@/components/views/SettingsView";
-import { UsersView } from "@/components/views/UsersView";
-import type { ViewName, UserRole } from "@/lib/types";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import type { ViewName } from "@/lib/types";
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: "Admin",
-  logistica: "Logística",
-  comercial: "Comercial",
-};
-
-const ROLE_COLORS: Record<UserRole, string> = {
-  admin: "default",
-  logistica: "secondary",
-  comercial: "outline",
-};
-
-const navItems: { view: ViewName; label: string; icon: typeof FileText; adminOnly?: boolean }[] = [
+const navItems: { view: ViewName; label: string; icon: typeof FileText }[] = [
   { view: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { view: "documents", label: "Documents", icon: FileText },
   { view: "new-document", label: "New Document", icon: PlusCircle },
   { view: "items", label: "Items", icon: Package },
   { view: "companies", label: "Companies", icon: Building2 },
-  { view: "users", label: "Usuários", icon: Users, adminOnly: true },
-  { view: "settings", label: "Settings", icon: Settings, adminOnly: true },
+  { view: "settings", label: "Settings", icon: Settings },
 ];
 
 function ViewRouter() {
   const currentView = useAppStore((s) => s.currentView);
 
   switch (currentView) {
-    case "login":
-      return <LoginPage />;
     case "dashboard":
       return <DashboardView />;
     case "documents":
@@ -74,8 +56,6 @@ function ViewRouter() {
       return <ItemsView />;
     case "companies":
       return <CompaniesView />;
-    case "users":
-      return <UsersView />;
     case "settings":
       return <SettingsView />;
     default:
@@ -86,11 +66,8 @@ function ViewRouter() {
 function AppSidebar() {
   const currentView = useAppStore((s) => s.currentView);
   const navigate = useAppStore((s) => s.navigate);
-  const userRole = useAppStore((s) => s.userRole);
-
-  const filteredNav = navItems.filter(
-    (item) => !item.adminOnly || userRole === "admin",
-  );
+  const currentUser = useAppStore((s) => s.currentUser);
+  const logout = useAppStore((s) => s.logout);
 
   return (
     <Sidebar collapsible="icon">
@@ -109,7 +86,7 @@ function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {filteredNav.map((item) => (
+              {navItems.map((item) => (
                 <SidebarMenuItem key={item.view}>
                   <SidebarMenuButton
                     isActive={currentView === item.view}
@@ -127,28 +104,26 @@ function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="px-4 py-2 space-y-2">
-          {userRole && (
-            <div className="flex items-center justify-between">
-              <Badge variant={ROLE_COLORS[userRole] as "default" | "secondary" | "outline"}>
-                {ROLE_LABELS[userRole]}
-              </Badge>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={async () => {
-                  await signOut({ redirect: false });
-                  useAppStore.getState().clearAuth();
-                  toast.info("Sessão encerrada");
-                }}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
+        {currentUser && (
+          <div className="flex items-center justify-between px-4 py-2 border-t mb-1">
+            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+              <p className="text-xs font-medium truncate">{currentUser.name || currentUser.email}</p>
+              <p className="text-xs text-muted-foreground truncate">{currentUser.role}</p>
             </div>
-          )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={logout}
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+        <div className="px-4 py-2">
           <p className="text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-            Invoicer v2.0.0
+            Invoicer v1.0.0
           </p>
         </div>
       </SidebarFooter>
@@ -170,35 +145,7 @@ function AppHeader() {
   );
 }
 
-export default function HomePage() {
-  const { data: session, status } = useSession();
-  const setAuth = useAppStore((s) => s.setAuth);
-  const currentView = useAppStore((s) => s.currentView);
-  const clearAuth = useAppStore((s) => s.clearAuth);
-
-  // Sync session → store
-  useEffect(() => {
-    if (session?.user) {
-      const u = session.user as unknown as { role?: string; id?: string; name?: string | null };
-      if (u.role && u.id) {
-        setAuth(u.role as UserRole, u.id, u.name || null);
-      }
-    }
-  }, [session, setAuth]);
-
-  // If not logged in, show login page only
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
-  if (!session || currentView === "login") {
-    return <LoginPage />;
-  }
-
+function AppLayout() {
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -209,10 +156,51 @@ export default function HomePage() {
         </main>
         <footer className="border-t px-4 py-3 mt-auto">
           <p className="text-xs text-muted-foreground text-center">
-            Invoicer — Sistema de Gestão de Documentos Comerciais
+            Invoicer — Commercial Document Management System
           </p>
         </footer>
       </SidebarInset>
     </SidebarProvider>
   );
+}
+
+function isValidUser(u: unknown): u is CurrentUser {
+  return (
+    typeof u === "object" &&
+    u !== null &&
+    typeof (u as Record<string, unknown>).id === "string" &&
+    typeof (u as Record<string, unknown>).email === "string" &&
+    typeof (u as Record<string, unknown>).role === "string"
+  );
+}
+
+export default function HomePage() {
+  const currentView = useAppStore((s) => s.currentView);
+  const currentUser = useAppStore((s) => s.currentUser);
+
+  // Restore session from localStorage on mount (with validation)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("invoicer_user");
+      if (saved) {
+        const user: unknown = JSON.parse(saved);
+        if (isValidUser(user)) {
+          useAppStore.setState({ currentUser: user, currentView: "dashboard" });
+          // Ensure DB state is correct on restore
+          fetch("/api/init", { method: "POST" }).catch(() => {});
+        } else {
+          localStorage.removeItem("invoicer_user");
+        }
+      }
+    } catch {
+      localStorage.removeItem("invoicer_user");
+    }
+  }, []);
+
+  // Always show login if no authenticated user
+  if (!currentUser || currentView === "login") {
+    return <LoginPage />;
+  }
+
+  return <AppLayout />;
 }

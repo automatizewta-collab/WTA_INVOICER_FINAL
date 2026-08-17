@@ -1,8 +1,26 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
+}
+
+/**
+ * Safely parse a value that may be a JSON string or already a parsed object.
+ * Needed because Prisma returns `String` fields as strings (SQLite)
+ * but `Json` fields as already-parsed objects (MySQL).
+ */
+export function safeJsonParse(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "object") return value; // already parsed (MySQL Json)
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
 }
 
 /**
@@ -19,17 +37,4 @@ export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(msg + details);
   }
   return res.json() as Promise<T>;
-}
-
-/**
- * Safely parse a JSON field that may be a native object (MySQL) or a JSON string (SQLite).
- */
-export function parseJsonField<T>(value: unknown, fallback: T): T {
-  if (value === null || value === undefined) return fallback;
-  if (typeof value === "object") return value as T;
-  try {
-    return JSON.parse(String(value)) as T;
-  } catch {
-    return fallback;
-  }
 }

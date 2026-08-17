@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { safeJsonParse } from "@/lib/utils";
 
 export async function POST(
   _request: NextRequest,
@@ -54,7 +55,7 @@ export async function POST(
       document: {
         id: updated.id,
         number: updated.number,
-        items: JSON.parse(updated.items),
+        items: safeJsonParse(updated.items),
       },
     });
   } catch {

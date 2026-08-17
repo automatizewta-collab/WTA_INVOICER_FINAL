@@ -4,6 +4,7 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import { calcLineTotal } from "@/lib/document-calculations";
+import { safeJsonParse } from "@/lib/utils";
 
 /** HTML-escape: handles &, <, >, ", ' */
 function esc(val: unknown): string {
@@ -296,12 +297,7 @@ export async function POST(
     }
 
     // Parse items and enrich with catalog data
-    let items: Record<string, unknown>[];
-    try {
-      items = JSON.parse(document.items as string);
-    } catch {
-      items = [];
-    }
+    let items: Record<string, unknown>[] = (safeJsonParse(document.items) as Record<string, unknown>[]) || [];
 
     if (items.length > 0) {
       const catalogItems = await db.item.findMany();
@@ -329,18 +325,10 @@ export async function POST(
     }
 
     // Parse JSON string fields from SQLite into proper objects for the template
-    let parsedNotes: string[] = [];
-    try { parsedNotes = JSON.parse(String(document.notes || "[]")); } catch { /* empty */ }
-
-    let parsedShipment: Record<string, unknown> = {};
-    try { parsedShipment = JSON.parse(String(document.shipmentDetails || "{}")); } catch { /* empty */ }
-
-    let parsedFinancial: Record<string, number> = {};
-    try { parsedFinancial = JSON.parse(String(document.financialDetails || "{}")); } catch { /* empty */ }
-
-    // Build a clean doc object with parsed fields
-    let parsedRecipientInfo: Record<string, unknown> = {};
-    try { parsedRecipientInfo = document.recipientInfo ? JSON.parse(String(document.recipientInfo)) : {}; } catch { parsedRecipientInfo = {}; }
+    const parsedNotes: string[] = (safeJsonParse(document.notes) as string[]) || [];
+    const parsedShipment: Record<string, unknown> = (safeJsonParse(document.shipmentDetails) as Record<string, unknown>) || {};
+    const parsedFinancial: Record<string, number> = (safeJsonParse(document.financialDetails) as Record<string, number>) || {};
+    const parsedRecipientInfo: Record<string, unknown> = (safeJsonParse(document.recipientInfo) as Record<string, unknown>) || {};
 
     const docForTemplate: Record<string, unknown> = {
       documentType: document.documentType,

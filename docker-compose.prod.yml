@@ -1,0 +1,30 @@
+# ============================================
+# INVOICER - Docker Compose (Production)
+# SQLite mode (single container, zero dependencies)
+# ============================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - db-data:/app/db
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:./db/custom.db
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  db-data:

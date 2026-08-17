@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 
 /**
  * Diagnostic endpoint — open /api/diag in the browser to check DB state.
- * Temporary: remove in production.
  */
 export async function GET() {
   const result: Record<string, unknown> = { timestamp: new Date().toISOString() };
@@ -20,28 +19,27 @@ export async function GET() {
     const userCount = await db.user.count();
     result.counts = { companies: companyCount, items: itemCount, documents: documentCount, users: userCount };
 
-    // 3. List companies
+    // 3. List users (email + role — NO password hash)
+    const users = await db.user.findMany({
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    result.users = users;
+
+    // 4. List companies
     const companies = await db.company.findMany({ select: { id: true, name: true, type: true } });
     result.companies = companies;
 
-    // 4. List items (code + name only)
-    const items = await db.item.findMany({ select: { id: true, code: true, nameEn: true } });
-    result.items = items;
+    // 5. Items count summary
+    result.itemsSummary = { total: itemCount };
 
-    // 5. Test: try inserting and rolling back a company via Prisma (DB-agnostic)
+    // 6. Seed version
     try {
-      const testId = "diag_test_" + Date.now();
-      await db.company.create({
-        data: { id: testId, name: "__diag_test__", type: "sender" },
-      });
-      await db.company.delete({ where: { id: testId } });
-      result.companyInsertTest = "OK — companies table accepts inserts";
-    } catch (e: unknown) {
-      result.companyInsertTest = `FAILED — ${String(e)}`;
+      const seedVersion = await db.appSetting.findUnique({ where: { key: "seed_version" } });
+      result.seedVersion = seedVersion?.value || "never run";
+    } catch {
+      result.seedVersion = "error reading";
     }
-
-    // 6. Check provider
-    result.provider = process.env.DATABASE_URL?.startsWith("file:") ? "SQLite" : "MySQL";
 
     result.status = "ok";
   } catch (error) {

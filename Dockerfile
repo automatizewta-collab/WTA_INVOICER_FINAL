@@ -49,7 +49,6 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 # Copy seed script and CSV data for auto-seed
 COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts
@@ -71,5 +70,7 @@ ENV HOSTNAME="0.0.0.0"
 
 # Copy and set entrypoint
 COPY --chmod=755 docker-entrypoint.sh ./docker-entrypoint.sh
+# Copy runtime deps needed by seed script (bcryptjs) and /api/init
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

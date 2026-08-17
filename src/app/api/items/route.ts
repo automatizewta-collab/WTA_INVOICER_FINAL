@@ -8,7 +8,6 @@ const itemSchema = z.object({
   nameEn: z.string().min(1, "Name (EN) is required"),
   nameEs: z.string().optional().nullable(),
   unitValueUsd: z.number().min(0),
-  unitValueUsdCommercial: z.number().min(0).optional().nullable(),
   grossWeight: z.number().min(0),
   netWeight: z.number().min(0),
   htsusCode: z.string().optional().nullable(),

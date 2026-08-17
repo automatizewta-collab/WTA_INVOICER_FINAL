@@ -69,8 +69,6 @@ const statusLabels: Record<string, string> = {
 
 export function DocumentsView() {
   const navigate = useAppStore((s) => s.navigate);
-  const userRole = useAppStore((s) => s.userRole);
-  const userId = useAppStore((s) => s.userId);
   const queryClient = useQueryClient();
 
   const [typeFilter, setTypeFilter] = useState("all");
@@ -87,10 +85,6 @@ export function DocumentsView() {
       if (typeFilter !== "all") params.set("type", typeFilter);
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (search) params.set("search", search);
-      // Non-admin users only see their own documents
-      if (userId && userRole !== "admin") {
-        params.set("userId", userId);
-      }
       return apiFetch<{ documents: DocumentWithRelations[] }>(`/api/documents?${params.toString()}`);
     },
   });

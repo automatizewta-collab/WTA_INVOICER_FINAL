@@ -30,7 +30,6 @@ import type {
   Company,
   Item,
   RecipientInfo,
-  PriceList,
 } from "@/lib/types";
 import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
@@ -72,7 +71,6 @@ export function EditDocumentView() {
   const [items, setItems] = useState<DocumentItem[]>([]);
   const [shipmentDetails, setShipmentDetails] = useState<ShipmentDetails>(emptyShipment);
   const [financialDetails, setFinancialDetails] = useState<FinancialDetails>(emptyFinancial);
-  const [priceList] = useState<PriceList>("logistics");
   const [notes, setNotes] = useState<string[]>([]);
   const [recipientInfo, setRecipientInfo] = useState<RecipientInfo>({});
 
@@ -97,10 +95,33 @@ export function EditDocumentView() {
   const catalogItems = catalogData?.items ?? [];
 
   // Populate form when document loads
+  // Wait for BOTH doc and catalogItems before initializing,
+  // so we can enrich document items with latest catalog data
   const initRef = useRef(false);
   useEffect(() => {
-    if (doc && !initRef.current) {
+    if (doc && catalogItems.length > 0 && !initRef.current) {
       initRef.current = true;
+      // Enrich document items with latest catalog data
+      // Keeps document-specific fields (qty, price, discount) but updates
+      // catalog fields (name, code, htsus, weights, end_use) from the live catalog
+      const docItems = Array.isArray(doc.items) ? doc.items : [];
+      const enrichedItems = docItems.map((docItem) => {
+        const catalog = catalogItems.find((c) => c.id === docItem.item_id);
+        if (!catalog) return docItem;
+        return {
+          ...docItem,
+          code: catalog.code || docItem.code,
+          name_pt: catalog.namePt || docItem.name_pt,
+          name_en: catalog.nameEn || docItem.name_en,
+          name_es: catalog.nameEs || docItem.name_es,
+          end_use: catalog.endUse || docItem.end_use,
+          end_use_es: catalog.endUseEs || docItem.end_use_es,
+          htsus_code: catalog.htsusCode || docItem.htsus_code,
+          gross_weight: catalog.grossWeight ?? docItem.gross_weight,
+          net_weight: catalog.netWeight ?? docItem.net_weight,
+          sterile_at_import: catalog.sterileAtImport || docItem.sterile_at_import,
+        };
+      });
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-time form initialization from API data
       void (doc && (setDocumentType(doc.documentType as DocumentType),
       setStatus(doc.status),
@@ -113,14 +134,13 @@ export function EditDocumentView() {
       setShowEndUseColumn(doc.showEndUseColumn),
       setSenderId(doc.senderId),
       setRecipientId(doc.recipientId || ""),
-      setItems(Array.isArray(doc.items) ? doc.items : []),
+      setItems(enrichedItems),
       setShipmentDetails({ ...emptyShipment, ...doc.shipmentDetails, boxes: Array.isArray(doc.shipmentDetails?.boxes) ? doc.shipmentDetails.boxes : [] }),
       setFinancialDetails({ ...emptyFinancial, ...doc.financialDetails }),
       setNotes(Array.isArray(doc.notes) ? doc.notes : []),
-      setRecipientInfo(doc.recipientInfo || {}),
-      setPriceList((doc.priceList || "logistics") as PriceList)));
+      setRecipientInfo(doc.recipientInfo || {})));
     }
-  }, [doc]);
+  }, [doc, catalogItems]);
 
   const updateMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -280,15 +300,9 @@ export function EditDocumentView() {
               <Input value={doc?.number || ""} disabled className="bg-muted" />
             </div>
             <div className="space-y-2">
-              <Label>Lista de Preço</Label>
-              <Input value={priceList === "logistics" ? "Logística" : "Comercial"} disabled className="bg-muted" />
-            </div>
-            <div className="space-y-2">
               <Label>Data</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Idioma</Label>
               <Select value={language} onValueChange={(v) => setLanguage(v as DocumentLanguage)}>
@@ -425,7 +439,6 @@ export function EditDocumentView() {
             showSterileColumn={showSterileColumn}
             htsusColumnTitle={htsusColumnTitle || undefined}
             dollarExchangeRate={dollarExchangeRate}
-            priceList={priceList}
             erpMode={isFromErp}
           />
         </CardContent>

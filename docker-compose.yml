@@ -47,7 +47,12 @@ services:
       retries: 15
       start_period: 30s
     restart: unless-stopped
-
+  adminer:
+    image: adminer
+    container_name: invoicer-adminer
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
 
 volumes:
   mysql-data:

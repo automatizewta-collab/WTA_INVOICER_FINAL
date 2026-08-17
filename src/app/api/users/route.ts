@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireRole } from "@/lib/auth-api";
+import { auditLog } from "@/lib/audit-log";
 import { hash } from "bcryptjs";
 import { z } from "zod";
 
 const createUserSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
   name: z.string().optional(),
-  role: z.enum(["admin", "logistica", "comercial"]),
-  password: z.string().min(4),
+  role: z.enum(["admin", "logistica", "comercial"]).default("logistica"),
 });
 
 export async function GET() {
+  const authUser = await requireRole("admin");
+  if (authUser instanceof NextResponse) return authUser;
+
   try {
     const users = await db.user.findMany({
       select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(users);
   } catch {
@@ -23,17 +28,15 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authUser = await requireRole("admin");
+  if (authUser instanceof NextResponse) return authUser;
+
   try {
     const body = await request.json();
     const data = createUserSchema.parse(body);
 
-    const existing = await db.user.findUnique({ where: { email: data.email } });
-    if (existing) {
-      return NextResponse.json({ error: "Email já cadastrado" }, { status: 409 });
-    }
-
     const passwordHash = await hash(data.password, 10);
-    const user = await db.user.create({
+    const createdUser = await db.user.create({
       data: {
         email: data.email,
         name: data.name || null,
@@ -43,12 +46,20 @@ export async function POST(request: NextRequest) {
       select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true },
     });
 
-    return NextResponse.json(user, { status: 201 });
-  } catch (error: unknown) {
+    await auditLog({
+      userId: authUser.id,
+      userEmail: authUser.email,
+      action: "user.create",
+      entity: "user",
+      entityId: data.email,
+      details: JSON.stringify({ role: data.role }),
+    });
+
+    return NextResponse.json(createdUser, { status: 201 });
+  } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message, details: JSON.stringify(error.issues) }, { status: 400 });
+      return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
     }
-    const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: "Failed to create user", details: msg }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
   }
 }

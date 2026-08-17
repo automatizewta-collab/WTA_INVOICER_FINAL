@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { serializeDocument } from "@/lib/serialize-document";
+import { safeJsonParse } from "@/lib/utils";
 
 export async function POST(
   _req: NextRequest,
@@ -27,19 +28,15 @@ export async function POST(
     }
 
     // Update the document to issued
-    const totalValue = (() => {
-      try {
-        const fd = JSON.parse(doc.financialDetails || "{}");
-        return fd.total_value || 0;
-      } catch { return 0; }
-    })();
+    const fdObj = safeJsonParse(doc.financialDetails) as Record<string, number> | null;
+    const totalValue = fdObj?.total_value || 0;
 
     const issued = await db.document.update({
       where: { id },
       data: {
         status: "issued",
         financialDetails: doc.financialDetails
-          ? JSON.stringify({ ...JSON.parse(doc.financialDetails), total_value: totalValue })
+          ? JSON.stringify({ ...(safeJsonParse(doc.financialDetails) as Record<string, unknown>), total_value: totalValue })
           : null,
       },
       include: { sender: true, recipient: true },
@@ -49,14 +46,15 @@ export async function POST(
 
     // ── Check if child documents already exist ──
     const existingInv = doc.documentType === "proforma"
-      ? await db.document.findUnique({ where: { number: doc.number + "-INV" } })
+      ? await db.document.findUnique({ where: { number: `${doc.number}-INV` } })
       : null;
     const existingPl = await db.document.findUnique({
-      where: { number: doc.number + "-PL" },
+      where: { number: `${doc.number}-PL` },
     });
 
     if (doc.documentType === "proforma") {
       if (existingInv && existingPl) {
+        // Children already exist → just update their status to issued
         const [updatedInv, updatedPl] = await db.$transaction([
           db.document.update({
             where: { id: existingInv.id },
@@ -71,6 +69,7 @@ export async function POST(
         ]);
         results.push(updatedInv, updatedPl);
       } else {
+        // Children don't exist → create them (legacy path)
         const baseData = {
           date: doc.date,
           senderId: doc.senderId,
@@ -88,7 +87,6 @@ export async function POST(
           recipientInfo: doc.recipientInfo,
           orderNumber: doc.orderNumber,
           language: doc.language,
-          priceList: doc.priceList,
           status: "issued" as const,
         };
 
@@ -99,17 +97,18 @@ export async function POST(
 
         const [invoice, packingList] = await db.$transaction([
           db.document.create({
-            data: { ...baseData, number: doc.number + "-INV", documentType: "invoice", financialDetails: invFinancial },
+            data: { ...baseData, number: `${doc.number}-INV`, documentType: "invoice", financialDetails: invFinancial },
             include: { sender: true, recipient: true },
           }),
           db.document.create({
-            data: { ...baseData, number: doc.number + "-PL", documentType: "packing_list", financialDetails: plFinancial },
+            data: { ...baseData, number: `${doc.number}-PL`, documentType: "packing_list", financialDetails: plFinancial },
             include: { sender: true, recipient: true },
           }),
         ]);
 
         await db.document.update({ where: { id: invoice.id }, data: { originProformaId: doc.id } });
         await db.document.update({ where: { id: packingList.id }, data: { originProformaId: doc.id } });
+
         results.push(invoice, packingList);
       }
     } else if (doc.documentType === "invoice") {
@@ -138,7 +137,6 @@ export async function POST(
           recipientInfo: doc.recipientInfo,
           orderNumber: doc.orderNumber,
           language: doc.language,
-          priceList: doc.priceList,
           status: "issued" as const,
         };
 
@@ -147,7 +145,7 @@ export async function POST(
         });
 
         const packingList = await db.document.create({
-          data: { ...baseData, number: doc.number + "-PL", documentType: "packing_list", financialDetails: plFinancial },
+          data: { ...baseData, number: `${doc.number}-PL`, documentType: "packing_list", financialDetails: plFinancial },
           include: { sender: true, recipient: true },
         });
 

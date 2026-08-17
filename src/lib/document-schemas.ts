@@ -76,7 +76,6 @@ export const documentCreateSchema = z.object({
   contactPhone: z.string().optional().nullable(),
   orderNumber: z.string().optional().nullable(),
   recipientInfo: recipientInfoSchema.optional().nullable(),
-  priceList: z.enum(["logistics", "commercial"]).optional().default("logistics"),
   // If provided, used as document number (ERP import)
   customNumber: z.string().optional(),
 });
@@ -101,5 +100,4 @@ export const documentUpdateSchema = z.object({
   financialDetails: financialDetailsSchema.optional().nullable(),
   notes: z.array(z.string()).optional(),
   recipientInfo: recipientInfoSchema.optional().nullable(),
-  priceList: z.enum(["logistics", "commercial"]).optional(),
 });

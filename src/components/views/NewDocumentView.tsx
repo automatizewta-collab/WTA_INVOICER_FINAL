@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
-import type { DocumentType, DocumentLanguage, Currency, DocumentItem, Company, Item, ShipmentDetails, FinancialDetails, RecipientInfo, PriceList } from "@/lib/types";
+import type { DocumentType, DocumentLanguage, Currency, DocumentItem, Company, Item, ShipmentDetails, FinancialDetails, RecipientInfo } from "@/lib/types";
 import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
 import { NotesForm } from "@/components/shared/NotesForm";
@@ -38,7 +38,6 @@ export function NewDocumentView() {
   const navigate = useAppStore((s) => s.navigate);
   const queryClient = useQueryClient();
 
-  const [priceList, setPriceList] = useState<PriceList>("logistics");
   const [documentType, setDocumentType] = useState<DocumentType>("proforma");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [language, setLanguage] = useState<DocumentLanguage>("en");
@@ -130,7 +129,6 @@ export function NewDocumentView() {
     onError: () => toast.error("Failed to create document"),
   });
 
-  const userId = useAppStore((s) => s.userId);
   const handleSubmit = (status: "draft" | "issued") => {
     if (!senderId) { toast.error("Selecione o remetente"); return; }
     if (items.length === 0) { toast.error("Adicione pelo menos um item"); return; }
@@ -145,8 +143,6 @@ export function NewDocumentView() {
       orderNumber: orderNumber || null,
       customNumber: orderNumber || undefined,
       recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
-      priceList,
-      _userId: userId,
     });
   };
 
@@ -359,17 +355,7 @@ export function NewDocumentView() {
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label>Lista de Preço</Label>
-              <Select value={priceList} onValueChange={(v) => setPriceList(v as PriceList)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="logistics">Logística</SelectItem>
-                  <SelectItem value="commercial">Comercial</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Cotação USD</Label>
               <Input type="number" step="0.01" placeholder="ex: 5.25"
@@ -464,7 +450,6 @@ export function NewDocumentView() {
               showSterileColumn={showSterileColumn}
               htsusColumnTitle={htsusColumnTitle || undefined}
               dollarExchangeRate={dollarExchangeRate}
-              priceList={priceList}
               erpMode={false}
             />
           )}

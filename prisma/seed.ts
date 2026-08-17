@@ -3,6 +3,7 @@
 // Usage: bun db:seed
 // Reads items from upload/itens.csv
 // Idempotent: skips if data already exists
+// ALWAYS ensures exactly one admin user
 // ============================================
 
 import { PrismaClient } from "@prisma/client";
@@ -133,34 +134,33 @@ async function main() {
   const dbUrl = process.env.DATABASE_URL || "";
   console.log("[SEED] Database: " + dbUrl.substring(0, 40) + "...");
 
-  // -- Check if seed already ran (idempotent) --
-  const existingItems = await prisma.item.count();
-  const existingCompanies = await prisma.company.count();
-  const existingUsers = await prisma.user.count();
-  console.log("[SEED] Current state: " + existingCompanies + " companies, " + existingItems + " items, " + existingUsers + " users");
-
-  // -- Users (only if none exist) --
-  if (existingUsers === 0) {
-    console.log("[SEED] Creating default users...");
-
-    const adminHash = await hash("admin123", 10);
-    const logisticaHash = await hash("logistica123", 10);
-    const comercialHash = await hash("comercial123", 10);
-
-    await prisma.user.createMany({
-      data: [
-        { email: "admin@invoicer.com", name: "Administrador", role: "admin", passwordHash: adminHash },
-        { email: "logistica@invoicer.com", name: "Logística", role: "logistica", passwordHash: logisticaHash },
-        { email: "comercial@invoicer.com", name: "Comercial", role: "comercial", passwordHash: comercialHash },
-      ],
-      skipDuplicates: true,
-    });
-    console.log("[SEED] Created 3 default users (admin, logistica, comercial).");
-  } else {
-    console.log("[SEED] " + existingUsers + " users already exist, skipping user seed.");
+  // ═══════════════════════════════════════════════════
+  // STEP 1: ALWAYS ensure exactly ONE admin user
+  // Delete all non-admin users, upsert admin@invoicer.com
+  // ═══════════════════════════════════════════════════
+  console.log("[SEED] Ensuring single admin user...");
+  const deletedCount = await prisma.user.deleteMany({
+    where: { email: { not: "admin@invoicer.com" } },
+  });
+  if (deletedCount.count > 0) {
+    console.log("[SEED] Deleted " + deletedCount.count + " non-admin user(s)");
   }
 
-  // -- Companies (only if none exist) --
+  const passwordHash = await hash("admin123", 10);
+  const admin = await prisma.user.upsert({
+    where: { email: "admin@invoicer.com" },
+    update: { passwordHash: passwordHash, role: "admin", name: "Admin" },
+    create: { email: "admin@invoicer.com", name: "Admin", role: "admin", passwordHash: passwordHash },
+  });
+  console.log("[SEED] Admin user ready: " + admin.email + " (" + admin.role + ")");
+
+  // ═══════════════════════════════════════════════════
+  // STEP 2: Companies (only if none exist)
+  // ═══════════════════════════════════════════════════
+  const existingItems = await prisma.item.count();
+  const existingCompanies = await prisma.company.count();
+  console.log("[SEED] Current state: " + existingCompanies + " companies, " + existingItems + " items");
+
   if (existingCompanies === 0) {
     console.log("[SEED] Creating default companies...");
 
@@ -204,7 +204,9 @@ async function main() {
     console.log("[SEED] Companies already exist, skipping.");
   }
 
-  // -- Items from CSV (only if none exist) --
+  // ═══════════════════════════════════════════════════
+  // STEP 3: Items from CSV (only if none exist)
+  // ═══════════════════════════════════════════════════
   if (existingItems === 0) {
     const csvItems = loadItemsFromCsv();
     if (csvItems.length === 0) {
@@ -230,7 +232,6 @@ async function main() {
               sterileAtImport: item.sterileAtImport,
             };
           }),
-          skipDuplicates: true,
         });
         created += batch.length;
         console.log("[SEED] Inserted " + created + "/" + csvItems.length + " items...");
@@ -248,10 +249,10 @@ async function main() {
     create: { key: "seed_version", value: "1" },
   });
 
+  const totalUsers = await prisma.user.count();
   const totalCompanies = await prisma.company.count();
   const totalItems = await prisma.item.count();
-  const totalUsers = await prisma.user.count();
-  console.log("[SEED] Complete! " + totalUsers + " users, " + totalCompanies + " companies, " + totalItems + " items in database.");
+  console.log("[SEED] Complete! " + totalUsers + " user(s), " + totalCompanies + " companies, " + totalItems + " items in database.");
   await prisma.$disconnect();
 }
 
