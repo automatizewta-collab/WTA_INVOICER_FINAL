@@ -17,9 +17,23 @@ function esc(val: unknown): string {
     .replace(/'/g, "&#x27;");
 }
 
+/** Helper: financial row */
+function finRow(label: string, value: string, brl: string, _isTotal = false): string {
+  const hasBrl = brl.length > 0;
+  const weight = _isTotal ? 'font-weight:700;font-size:14px;color:#0f172a;' : 'color:#475569;';
+  return "<tr><td style=\"padding:6px 12px;" + weight + "\">" + label + "</td>" +
+    '<td style="padding:6px 12px;text-align:right;' + weight + '">' + value + "</td>" +
+    (hasBrl ? '<td style="padding:6px 12px;text-align:right;color:#475569;font-size:11px">' + brl + "</td>" : "") +
+    "</tr>";
+}
+
+/** Helper: shipment field */
+function shipField(label: string, value: string): string {
+  return '<div style="margin-bottom:4px"><span style="color:#64748b;font-size:9px;text-transform:uppercase;letter-spacing:0.05px">' + label + "</span><br><span style=\"color:#1e293b;font-weight:600\">" + esc(value) + "</span></div>";
+}
+
 /**
  * Read a logo file and return a base64 data URI.
- * Searches: 1) company logoUrl (relative to public/), 2) default logos dir.
  */
 async function getLogoBase64(
   sender: Record<string, unknown> | null,
@@ -38,7 +52,7 @@ async function getLogoBase64(
         const b64 = buf.toString("base64");
         return "data:image/png;base64," + b64;
       } catch {
-        /* skip unreadable file */
+        /* skip */
       }
     }
   }
@@ -54,18 +68,28 @@ function buildPdfHtml(
 ): string {
   const isEs = doc.language === "es";
   const docType = String(doc.documentType || "proforma");
+  const isDraft = doc.status === "draft";
+
+  // Accent colors
+  const primary = "#0c1f3f";
+  const accent  = "#1a56db";
+  const lightBg = "#f8fafc";
+  const borderC = "#e2e8f0";
+  const textMuted = "#64748b";
 
   const typeLabels: Record<string, Record<string, string>> = {
     proforma: { en: "PROFORMA INVOICE", es: "FACTURA PROFORMA" },
-    invoice: { en: "COMMERCIAL INVOICE", es: "FACTURA COMERCIAL" },
+    invoice:  { en: "COMMERCIAL INVOICE", es: "FACTURA COMERCIAL" },
     packing_list: { en: "PACKING LIST", es: "LISTA DE EMBALAJE" },
   };
   const label = typeLabels[docType]?.[isEs ? "es" : "en"] || docType.toUpperCase();
-  const isDraft = doc.status === "draft";
+  const dateStr = new Date(doc.date as string).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const htsusTitle = esc(doc.htsusColumnTitle || "HTSUS");
 
   // ── Items table rows ──
   const rows: string[] = [];
-  for (const rawItem of items) {
+  for (let idx = 0; idx < items.length; idx++) {
+    const rawItem = items[idx];
     const item = rawItem as Record<string, unknown>;
     const name = isEs
       ? (item.name_es || item.name_en || item.name_pt || "")
@@ -79,100 +103,134 @@ function buildPdfHtml(
     const lineTotal = calcLineTotal({ quantity: qty, unit_price: price, discount: disc });
     const gw = Number(item.gross_weight || 0);
     const nw = Number(item.net_weight || 0);
+    const isSterile = String(item.sterile_at_import || "NO").toUpperCase() === "YES";
+    const bg = idx % 2 === 0 ? "background:#ffffff;" : "background:" + lightBg + ";";
+    const cellBorder = "border-bottom:1px solid " + borderC + ";";
+    const cellPad = "padding:8px 10px;";
+    const cellFs = "font-size:10px;";
 
     rows.push(
-      "<tr>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(item.code || "") + "</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(name) + "</td>" +
-      (doc.showEndUseColumn ? '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">' + esc(endUse) + "</td>" : "") +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">' + esc(item.htsus_code) + "</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">' + qty + "</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">$' + price.toFixed(2) + "</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">' + disc + "%</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">$' + lineTotal.toFixed(2) + "</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">' + gw + "</td>" +
-      '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">' + nw + "</td>" +
+      "<tr style=\"" + bg + "\">" +
+      '<td style="' + cellPad + cellBorder + cellFs + 'color:' + textMuted + ';font-family:monospace;font-size:9px">' + esc(item.code || "") + "</td>" +
+      '<td style="' + cellPad + cellBorder + cellFs + 'max-width:220px;line-height:1.4">' + esc(name) + "</td>" +
+      (doc.showEndUseColumn ? '<td style="' + cellPad + cellBorder + cellFs + 'text-align:center;color:' + textMuted + '">' + esc(endUse) + "</td>" : "") +
+      (doc.showSterileColumn ? '<td style="' + cellPad + cellBorder + cellFs + 'text-align:center">' + (isSterile ? '<span style="color:#059669;font-weight:700">YES</span>' : '<span style="color:#94a3b8">NO</span>') + "</td>" : "") +
+      '<td style="' + cellPad + cellBorder + cellFs + 'font-family:monospace;font-size:9px;color:' + textMuted + '">' + esc(item.htsus_code) + "</td>" +
+      '<td style="' + cellPad + cellBorder + cellFs + 'text-align:center;font-weight:500">' + qty + "</td>" +
+      '<td style="' + cellPad + cellBorder + cellFs + 'text-align:right">$' + price.toFixed(2) + "</td>" +
+      '<td style="' + cellPad + cellBorder + cellFs + 'text-align:center;color:' + textMuted + '">' + disc + "%</td>" +
+      '<td style="' + cellPad + cellBorder + 'font-size:10px;text-align:right;font-weight:600;color:#0f172a">$' + lineTotal.toFixed(2) + "</td>" +
+      (docType === "packing_list"
+        ? '<td style="' + cellPad + cellBorder + cellFs + 'text-align:right">' + gw + "</td>" +
+          '<td style="' + cellPad + cellBorder + cellFs + 'text-align:right">' + nw + "</td>"
+        : "") +
       "</tr>"
     );
   }
 
   const subtotal = (items as Record<string, unknown>[]).reduce((s, item) => {
-    return s + calcLineTotal({
-      quantity: Number(item.quantity || 0),
-      unit_price: Number(item.unit_price || 0),
-      discount: Number(item.discount || 0),
-    });
+    return s + calcLineTotal({ quantity: Number(item.quantity || 0), unit_price: Number(item.unit_price || 0), discount: Number(item.discount || 0) });
   }, 0);
 
   // ── Financial summary ──
   let financialHtml = "";
   if (docType !== "packing_list") {
     const fd = (doc.financialDetails || {}) as Record<string, number>;
+    const discAmt = fd.discount ? subtotal * fd.discount / 100 : 0;
     const total = fd.total_value || subtotal;
+    const rate = Number(doc.dollarExchangeRate || 0);
+    const brlTotal = rate > 0 ? total * rate : 0;
+
+    const finRows: string[] = [];
+    finRows.push(finRow("Subtotal", "$" + subtotal.toFixed(2), rate > 0 ? "R$ " + (subtotal * rate).toFixed(2) : ""));
+    if (fd.discount) finRows.push(finRow("Discount (" + fd.discount + "%)", "-$" + discAmt.toFixed(2), rate > 0 ? "-R$ " + (discAmt * rate).toFixed(2) : ""));
+    if (fd.shipping_cost) finRows.push(finRow(isEs ? "Flete" : "Shipping", "$" + (fd.shipping_cost as number).toFixed(2), rate > 0 ? "R$ " + (fd.shipping_cost * rate).toFixed(2) : ""));
+    if (fd.insurance) finRows.push(finRow(isEs ? "Seguro" : "Insurance", "$" + (fd.insurance as number).toFixed(2), rate > 0 ? "R$ " + (fd.insurance * rate).toFixed(2) : ""));
+    if (fd.bank_fees) finRows.push(finRow(isEs ? "Tarifas Bancarias" : "Bank Fees", "$" + (fd.bank_fees as number).toFixed(2), rate > 0 ? "R$ " + (fd.bank_fees * rate).toFixed(2) : ""));
+
     financialHtml =
-      '<div style="margin-top:20px;display:flex;justify-content:flex-end">' +
-        '<table style="width:280px;font-size:12px">' +
-        "<tr><td style=\"padding:4px 8px\">Subtotal</td><td style=\"padding:4px 8px;text-align:right;font-weight:600\">$" + subtotal.toFixed(2) + "</td></tr>" +
-        (fd.discount ? "<tr><td style=\"padding:4px 8px\">Discount (" + fd.discount + "%)</td><td style=\"padding:4px 8px;text-align:right\">-$" + (subtotal * fd.discount / 100).toFixed(2) + "</td></tr>" : "") +
-        (fd.shipping_cost ? "<tr><td style=\"padding:4px 8px\">Shipping</td><td style=\"padding:4px 8px;text-align:right\">$" + (fd.shipping_cost as number).toFixed(2) + "</td></tr>" : "") +
-        (fd.insurance ? "<tr><td style=\"padding:4px 8px\">Insurance</td><td style=\"padding:4px 8px;text-align:right\">$" + (fd.insurance as number).toFixed(2) + "</td></tr>" : "") +
-        (fd.bank_fees ? "<tr><td style=\"padding:4px 8px\">Bank Fees</td><td style=\"padding:4px 8px;text-align:right\">$" + (fd.bank_fees as number).toFixed(2) + "</td></tr>" : "") +
-        '<tr style="border-top:2px solid #111"><td style="padding:6px 8px;font-weight:700;font-size:14px">TOTAL</td><td style="padding:6px 8px;text-align:right;font-weight:700;font-size:14px">$' + total.toFixed(2) + "</td></tr>" +
-        "</table></div>";
+      '<div style="margin-top:28px;display:flex;justify-content:flex-end">' +
+        '<div style="width:360px;background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+        '<table style="width:100%;font-size:11px;border-collapse:collapse">' +
+        "<tbody>" + finRows.join("") +
+        '<tr style="border-top:2px solid ' + primary + ';background:' + lightBg + '">' +
+        '<td style="padding:10px 12px;font-weight:800;font-size:15px;color:' + primary + ';letter-spacing:0.3px">TOTAL</td>' +
+        '<td style="padding:10px 12px;text-align:right;font-weight:800;font-size:15px;color:' + primary + '">$' + total.toFixed(2) + "</td>" +
+        (rate > 0 ? '<td style="padding:10px 12px;text-align:right;font-weight:800;font-size:15px;color:' + primary + '">R$ ' + brlTotal.toFixed(2) + "</td>" : "") +
+        "</tr>" +
+        (rate > 0 ? '<tr><td colspan="3" style="padding:3px 12px 8px;font-size:9px;color:#94a3b8;text-align:right;font-style:italic">Exchange rate: 1 USD = ' + rate.toFixed(4) + " BRL</td></tr>" : "") +
+        "</tbody></table></div></div>";
+  } else {
+    const totalGw = (items as Record<string, unknown>[]).reduce((s, item) => s + Number(item.gross_weight || 0), 0);
+    const totalNw = (items as Record<string, unknown>[]).reduce((s, item) => s + Number(item.net_weight || 0), 0);
+    const totalQty = (items as Record<string, unknown>[]).reduce((s, item) => s + Number(item.quantity || 0), 0);
+    financialHtml =
+      '<div style="margin-top:28px;display:flex;justify-content:flex-end">' +
+        '<div style="width:240px;background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+        '<table style="width:100%;font-size:11px;border-collapse:collapse">' +
+        '<tr><td style="padding:8px 12px;color:' + textMuted + '">Total Items</td><td style="padding:8px 12px;text-align:right;font-weight:600">' + items.length + "</td></tr>" +
+        '<tr><td style="padding:8px 12px;color:' + textMuted + '">Total Qty</td><td style="padding:8px 12px;text-align:right;font-weight:600">' + totalQty + "</td></tr>" +
+        '<tr style="border-top:2px solid ' + primary + ';background:' + lightBg + '"><td style="padding:10px 12px;font-weight:800;font-size:14px;color:' + primary + '">Total G.W.</td><td style="padding:10px 12px;text-align:right;font-weight:800;font-size:14px;color:' + primary + '">' + totalGw.toFixed(2) + " kg</td></tr>" +
+        '<tr style="background:' + lightBg + '"><td style="padding:10px 12px;font-weight:800;font-size:14px;color:' + primary + '">Total N.W.</td><td style="padding:10px 12px;text-align:right;font-weight:800;font-size:14px;color:' + primary + '">' + totalNw.toFixed(2) + " kg</td></tr>" +
+        "</table></div></div>";
   }
 
   // ── Shipment details ──
-  const sd = (doc.shipmentDetails || {}) as Record<string, string>;
+  const sd = (doc.shipmentDetails || {}) as Record<string, unknown>;
   let shipmentHtml = "";
   if (sd.carrier) {
-    const parts: string[] = [];
-    parts.push((isEs ? "Transportadora" : "Carrier") + ": " + esc(sd.carrier));
-    if (sd.incoterms) parts.push("Incoterms: " + esc(sd.incoterms));
-    if (sd.origin_port) parts.push((isEs ? "Origen" : "Origin") + ": " + esc(sd.origin_port));
-    if (sd.destination_port) parts.push(" \u2192 " + esc(sd.destination_port));
-    if (sd.awb) parts.push("AWB: " + esc(sd.awb));
-    if (sd.shipment_date) parts.push((isEs ? "Fecha" : "Date") + ": " + esc(sd.shipment_date));
+    const shipFields: string[] = [];
+    shipFields.push(shipField(isEs ? "Transportadora" : "Carrier", String(sd.carrier)));
+    if (sd.incoterms) shipFields.push(shipField("Incoterms", String(sd.incoterms)));
+    if (sd.origin_port) shipFields.push(shipField(isEs ? "Puerto Origen" : "Origin Port", String(sd.origin_port)));
+    if (sd.destination_port) shipFields.push(shipField(isEs ? "Puerto Destino" : "Destination Port", String(sd.destination_port)));
+    if (sd.awb) shipFields.push(shipField("AWB / MAWB", String(sd.awb)));
+    if (sd.shipment_date) shipFields.push(shipField(isEs ? "Fecha Embarque" : "Shipment Date", String(sd.shipment_date)));
+    const boxes = Array.isArray(sd.boxes) ? sd.boxes : [];
+    if (boxes.length > 0) shipFields.push(shipField(isEs ? "Cajas" : "Boxes", String(boxes.length)));
 
     shipmentHtml =
-      '<div style="margin-top:16px;padding:12px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px">' +
-      "<strong>" + (isEs ? "Detalles del Embarque" : "Shipment Details") + "</strong><br>" +
-      parts.join(" | ") +
-      "</div>";
+      '<div style="margin-top:24px;background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+      '<div style="background:' + primary + ';padding:8px 16px">' +
+      '<p style="font-weight:700;font-size:11px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Detalles del Embarque" : "Shipment Details") + "</p>" +
+      "</div>" +
+      '<div style="padding:14px 18px;font-size:11px">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 28px">' +
+      shipFields.join("") +
+      "</div></div></div>";
   }
 
   // ── Notes ──
   const notes = (doc.notes || []) as string[];
   let notesHtml = "";
   if (notes.length > 0) {
-    const noteLines = notes.map(n => '<p style="margin:2px 0">\u2022 ' + esc(n) + "</p>").join("");
     notesHtml =
-      '<div style="margin-top:16px;font-size:11px">' +
-      "<strong>" + (isEs ? "Notas" : "Notes") + ":</strong>" +
-      noteLines +
-      "</div>";
+      '<div style="margin-top:24px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04)">' +
+      '<div style="background:#f59e0b;padding:6px 16px">' +
+      '<p style="font-weight:700;font-size:10px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Notas" : "Notes") + "</p>" +
+      "</div>" +
+      '<div style="padding:12px 16px;font-size:11px">' +
+      notes.map(n => '<p style="margin:4px 0;color:#78350f;line-height:1.5">\u2022  ' + esc(n) + "</p>").join("") +
+      "</div></div>";
   }
 
   // ── Sender info block ──
   let senderInfoHtml = "";
   if (sender) {
     senderInfoHtml =
-      "<strong>" + esc(sender.name) + "</strong><br>" +
-      esc(sender.address || "") + "<br>" +
-      esc(sender.city || "") + " " + esc(sender.state || "") + " " + esc(sender.postalCode || "") + "<br>" +
-      esc(sender.country || "");
-    if (sender.cnpj) senderInfoHtml += "<br>CNPJ: " + esc(sender.cnpj);
+      '<p style="font-weight:700;font-size:12px;color:' + primary + ';margin-bottom:4px">' + esc(sender.name) + "</p>" +
+      (sender.address ? '<p style="color:#475569">' + esc(String(sender.address)) + "</p>" : "") +
+      '<p style="color:#475569">' + esc(sender.city || "") + ", " + esc(sender.state || "") + " " + esc(sender.postalCode || "") + "</p>" +
+      '<p style="color:#475569">' + esc(sender.country || "") + "</p>" +
+      (sender.cnpj ? '<p style="margin-top:4px;font-size:9px;color:#94a3b8;letter-spacing:0.5px;font-family:monospace">CNPJ: ' + esc(sender.cnpj) + "</p>" : "");
   }
 
-  // Parse recipientInfo overrides (doc is the first param, not the global 'document')
+  // Recipient info overrides
   let recipientOverrides: Record<string, string> = {};
   if (doc.recipientInfo && typeof doc.recipientInfo === "object") {
     recipientOverrides = doc.recipientInfo as Record<string, string>;
-  } else if (typeof doc.recipientInfo === "string") {
-    try { recipientOverrides = JSON.parse(String(doc.recipientInfo)); } catch { /* empty */ }
   }
 
-  // ── Recipient block ──
-  let recipientHtml = "";
   const rEmail = recipientOverrides.email || (recipient?.email || "");
   const rAddress = recipientOverrides.address || (recipient?.address || "");
   const rCity = recipientOverrides.city || (recipient?.city || "");
@@ -180,104 +238,144 @@ function buildPdfHtml(
   const rPostalCode = recipientOverrides.postalCode || (recipient?.postalCode || "");
   const rCountry = recipientOverrides.country || (recipient?.country || "");
 
+  // ── Recipient block ──
+  let recipientHtml = "";
   if (recipient) {
     recipientHtml =
-      '<div style="padding:10px 14px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px">' +
-      "<strong>" + (isEs ? "Destinatario" : "Ship To") + ":</strong><br>" +
-      esc(recipient.name) + "<br>" +
-      esc(rAddress) + "<br>" +
-      esc(rCity) + " " + esc(rState) + " " + esc(rPostalCode) + "<br>" +
-      esc(rCountry) +
-      (doc.contactName ? "<br>Contact: " + esc(doc.contactName) : "") +
-      (doc.contactPhone ? " | " + esc(doc.contactPhone) : "") +
-      (rEmail ? "<br>" + esc(rEmail) : "") +
-      "</div>";
+      '<div style="background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+      '<div style="background:' + accent + ';padding:6px 16px">' +
+      '<p style="font-weight:700;font-size:10px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Destinatario" : "Ship To") + "</p>" +
+      "</div>" +
+      '<div style="padding:12px 16px;font-size:11px">' +
+      '<p style="font-weight:700;font-size:12px;color:' + primary + ';margin-bottom:4px">' + esc(recipient.name) + "</p>" +
+      (rAddress ? "<p style=\"color:#475569\">" + esc(rAddress) + "</p>" : "") +
+      '<p style="color:#475569">' + esc(rCity) + (rState ? ", " + esc(rState) : "") + " " + esc(rPostalCode) + "</p>" +
+      '<p style="color:#475569">' + esc(rCountry) + "</p>" +
+      (doc.contactName ? '<p style="margin-top:6px;padding-top:6px;border-top:1px solid ' + borderC + ';color:#475569;font-size:10px">' + (isEs ? "Contacto" : "Contact") + ": <strong style=\"color:#0f172a\">" + esc(doc.contactName) + "</strong>" + (doc.contactPhone ? ' <span style="color:#94a3b8">|</span> ' + esc(doc.contactPhone) : "") + "</p>" : "") +
+      (rEmail ? '<p style="color:#94a3b8;font-size:10px;margin-top:2px">' + esc(rEmail) + "</p>" : "") +
+      "</div></div>";
   }
 
   // ── Bank details ──
   let bankHtml = "";
   if (sender?.bankDetails) {
     bankHtml =
-      '<div style="margin-top:24px;padding:10px 14px;border-top:1px solid #e5e7eb;font-size:10px;color:#555">' +
-      "<strong>" + (isEs ? "Detalles Bancarios" : "Bank Details") + ":</strong><br>" +
+      '<div style="margin-top:28px;background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+      '<div style="background:#334155;padding:6px 16px">' +
+      '<p style="font-weight:700;font-size:10px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Detalles Bancarios" : "Bank Details") + "</p>" +
+      "</div>" +
+      '<div style="padding:12px 16px;font-size:10px;color:#475569;line-height:1.6">' +
       esc(sender.bankDetails) +
-      "</div>";
+      "</div></div>";
   }
 
-  // ── Logo header ──
-  const dateStr = new Date(doc.date as string).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const htsusTitle = esc(doc.htsusColumnTitle || "HTSUS");
-
-  // Build the logo + title header row
+  // ── Header ──
   let headerHtml: string;
   if (logoDataUri) {
     headerHtml =
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
-        '<img src="' + logoDataUri + '" alt="Logo" style="height:56px;width:auto;max-width:250px;object-fit:contain" />' +
-        "<div>" +
-          '<h1 style="font-size:20px;font-weight:800;color:#111;text-align:right">' + label + "</h1>" +
-          '<p style="font-size:12px;color:#666;margin-top:2px;text-align:right">' + esc(doc.number) + " | " + dateStr + "</p>" +
+        '<img src="' + logoDataUri + '" alt="Logo" style="height:64px;width:auto;max-width:280px;object-fit:contain" />' +
+        '<div style="text-align:right">' +
+          '<h1 style="font-size:24px;font-weight:900;color:' + primary + ';letter-spacing:1px;text-transform:uppercase">' + label + "</h1>" +
+          '<div style="display:flex;align-items:center;justify-content:flex-end;gap:14px;margin-top:6px">' +
+            '<span style="font-size:13px;color:#0f172a;font-weight:700;font-family:\'Courier New\',monospace;background:' + lightBg + ';padding:3px 10px;border-radius:4px;border:1px solid ' + borderC + '">' + esc(doc.number) + "</span>" +
+            '<span style="font-size:12px;color:#94a3b8">|</span>' +
+            '<span style="font-size:11px;color:' + textMuted + '">' + dateStr + "</span>" +
+          "</div>" +
+          (isDraft ? '<div style="margin-top:8px"><span style="display:inline-block;padding:3px 14px;background:#fef2f2;color:#dc2626;border:2px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase">DRAFT</span></div>' : "") +
         "</div>" +
       "</div>";
   } else {
     headerHtml =
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
         "<div>" +
-          '<h1 style="font-size:20px;font-weight:800;color:#111">' + label + "</h1>" +
-          '<p style="font-size:12px;color:#666;margin-top:2px">' + esc(doc.number) + " | " + dateStr + "</p>" +
+          '<h1 style="font-size:24px;font-weight:900;color:' + primary + ';letter-spacing:1px;text-transform:uppercase">' + label + "</h1>" +
+          '<div style="display:flex;align-items:center;gap:14px;margin-top:6px">' +
+            '<span style="font-size:13px;color:#0f172a;font-weight:700;font-family:\'Courier New\',monospace;background:' + lightBg + ';padding:3px 10px;border-radius:4px;border:1px solid ' + borderC + '">' + esc(doc.number) + "</span>" +
+            '<span style="font-size:12px;color:#94a3b8">|</span>' +
+            '<span style="font-size:11px;color:' + textMuted + '">' + dateStr + "</span>" +
+          "</div>" +
         "</div>" +
         '<div style="text-align:right;font-size:11px">' + senderInfoHtml + "</div>" +
       "</div>";
   }
 
-  // Build the sender / recipient row (only when logo is present, otherwise sender is in the header)
+  // ── Sender / Recipient row ──
   let partyRowHtml = "";
   if (logoDataUri && sender) {
     partyRowHtml =
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:24px">' +
-        '<div style="font-size:11px">' +
-          "<strong>" + (isEs ? "Remetente" : "From") + ":</strong><br>" +
-          senderInfoHtml +
+      '<div style="margin-top:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:24px">' +
+        '<div style="font-size:11px;flex:1;background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+          '<div style="background:' + primary + ';padding:6px 16px">' +
+          '<p style="font-weight:700;font-size:10px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Remetente" : "From") + "</p>" +
+          "</div>" +
+          '<div style="padding:12px 16px">' + senderInfoHtml + "</div>" +
         "</div>" +
-        recipientHtml +
+        '<div style="flex:1">' + recipientHtml + "</div>" +
       "</div>";
   } else {
-    partyRowHtml = '<div style="margin-bottom:20px">' + recipientHtml + "</div>";
+    partyRowHtml = '<div style="margin-top:20px">' + recipientHtml + "</div>";
+  }
+
+  // ── Table headers ──
+  const thStyle = "background:" + primary + ";color:#ffffff;padding:10px 10px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;border-bottom:2px solid " + accent;
+  const thStyleR = thStyle + ";text-align:right";
+  const thStyleC = thStyle + ";text-align:center";
+
+  let tableHeaders =
+    '<th style="' + thStyle + '">' + (isEs ? "Codigo" : "Code") + "</th>" +
+    '<th style="' + thStyle + '">' + (isEs ? "Descripcion" : "Description") + "</th>";
+  if (doc.showEndUseColumn) tableHeaders += '<th style="' + thStyleC + '">' + (isEs ? "Uso Final" : "End Use") + "</th>";
+  if (doc.showSterileColumn) tableHeaders += '<th style="' + thStyleC + '">Sterile</th>';
+  tableHeaders +=
+    '<th style="' + thStyle + '">' + htsusTitle + "</th>" +
+    '<th style="' + thStyleC + '">Qty</th>' +
+    '<th style="' + thStyleR + '">Unit Price</th>' +
+    '<th style="' + thStyleC + '">Disc.</th>' +
+    '<th style="' + thStyleR + '">Line Total</th>';
+  if (docType === "packing_list") {
+    tableHeaders +=
+      '<th style="' + thStyleR + '">G.W. (kg)</th>' +
+      '<th style="' + thStyleR + '">N.W. (kg)</th>';
   }
 
   // ── Assemble final HTML ──
   return "<!DOCTYPE html>" +
     '<html lang="' + (isEs ? "es" : "en") + '">' +
-    "<head><meta charset=\"utf-8\"><title>" + label + " - " + esc(doc.number) + "</title>" +
-    "<style>" +
-    "@page { size: A4; margin: 15mm; }" +
+    '<head><meta charset="utf-8"><title>' + label + ' - ' + esc(doc.number) + '</title>' +
+    '<style>' +
+    "@page { size: A4; margin: 10mm 14mm; }" +
     "* { margin: 0; padding: 0; box-sizing: border-box; }" +
-    "body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #111; font-size: 11px; line-height: 1.4; }" +
-    ".watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 100px; color: rgba(255,0,0,0.15); font-weight: 900; z-index: 0; pointer-events: none; }" +
+    "body { font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif; color: #1f2937; font-size: 11px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }" +
+    ".watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 120px; color: rgba(220,38,38,0.06); font-weight: 900; z-index: 0; pointer-events: none; letter-spacing: 14px; }" +
     ".content { position: relative; z-index: 1; }" +
     "table { border-collapse: collapse; width: 100%; }" +
-    "th { background: #f9fafb; padding: 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #111; }" +
-    ".separator { border: none; border-top: 1.5px solid #111; margin: 12px 0; }" +
+    "table th:first-child { border-radius: 8px 0 0 0; }" +
+    "table th:last-child { border-radius: 0 8px 0 0; }" +
+    ".top-bar { height: 4px; background: linear-gradient(90deg, " + primary + ", " + accent + ", " + primary + "); border-radius: 2px; margin-bottom: 20px; }" +
+    ".separator { border: none; border-top: 1px solid " + borderC + "; margin: 0; }" +
+    ".footer-bar { margin-top: 32px; padding-top: 12px; border-top: 2px solid " + primary + "; display: flex; justify-content: space-between; align-items: center; }" +
+    ".footer-bar .left { font-size: 8px; color: #94a3b8; letter-spacing: 0.5px; text-transform: uppercase; }" +
+    ".footer-bar .right { font-size: 9px; color: #94a3b8; }" +
     "</style></head><body>" +
-    (isDraft ? '<div class="watermark">DRAFT</div>' : "") +
+    (isDraft ? '<div class="watermark">DRAFT</div>' : '') +
     '<div class="content">' +
+    '<div class="top-bar"></div>' +
     headerHtml +
-    '<hr class="separator">' +
+    '<hr class="separator" style="margin-top:12px">' +
     partyRowHtml +
-    '<table style="font-size:11px"><thead><tr>' +
-    "<th>" + (isEs ? "C\u00f3digo del Producto" : "Product Code") + "</th>" +
-    "<th>" + (isEs ? "Descripci\u00f3n" : "Description") + "</th>" +
-    (doc.showEndUseColumn ? "<th>" + (isEs ? "Uso Final" : "End Use") + "</th>" : "") +
-    "<th>" + htsusTitle + "</th>" +
-    '<th style="text-align:center">Qty</th>' +
-    '<th style="text-align:right">Unit Price</th>' +
-    '<th style="text-align:center">Disc.</th>' +
-    '<th style="text-align:right">Line Total</th>' +
-    '<th style="text-align:right">G.W. (kg)</th>' +
-    '<th style="text-align:right">N.W. (kg)</th>' +
-    "</tr></thead><tbody>" + rows.join("") + "</tbody></table>" +
+    '<table style="margin-top:24px;font-size:11px;border:1px solid ' + borderC + ';border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04)"><thead><tr>' +
+    tableHeaders +
+    "</tr></thead><tbody>" + rows.join("") + "</tbody>" +
+    (items.length > 0 && docType !== "packing_list"
+      ? '<tfoot><tr style="border-top:2px solid ' + primary + ';background:' + lightBg + '"><td colspan="6" style="padding:10px 12px;font-weight:700;text-align:right;font-size:12px;color:' + primary + '">Subtotal</td><td style="padding:10px 12px;font-weight:700;text-align:right;font-size:12px;color:' + primary + '">$' + subtotal.toFixed(2) + "</td></tr></tfoot>"
+      : "") +
+    "</table>" +
     financialHtml + shipmentHtml + notesHtml + bankHtml +
-    '<div style="margin-top:12px;text-align:center;font-size:9px;color:#999">Generated by Invoicer | ' + new Date().toISOString() + "</div>" +
+    '<div class="footer-bar">' +
+      '<div class="left">Generated by Invoicer</div>' +
+      '<div class="right">' + new Date().toISOString().slice(0, 10) + '</div>' +
+    "</div>" +
     "</div></body></html>";
 }
 
@@ -324,7 +422,6 @@ export async function POST(
       });
     }
 
-    // Parse JSON string fields from SQLite into proper objects for the template
     const parsedNotes: string[] = (safeJsonParse(document.notes) as string[]) || [];
     const parsedShipment: Record<string, unknown> = (safeJsonParse(document.shipmentDetails) as Record<string, unknown>) || {};
     const parsedFinancial: Record<string, number> = (safeJsonParse(document.financialDetails) as Record<string, number>) || {};
@@ -348,7 +445,6 @@ export async function POST(
       showSterileColumn: document.showSterileColumn,
     };
 
-    // Resolve logo (company-specific or default WTA)
     const logoDataUri = await getLogoBase64(
       document.sender as unknown as Record<string, unknown> | null,
     );
@@ -361,7 +457,6 @@ export async function POST(
       logoDataUri,
     );
 
-    // Save HTML to disk
     const { writeFile, mkdir } = await import("fs/promises");
     const pdfDir = join(process.cwd(), "db", "pdfs");
     await mkdir(pdfDir, { recursive: true });
