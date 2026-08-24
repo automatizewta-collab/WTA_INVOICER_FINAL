@@ -30,6 +30,7 @@ services:
       dockerfile: Dockerfile
       args:
         DATABASE_URL: mysql://${MYSQL_USER:-invoicer}:${MYSQL_PASSWORD:-invoicerpassword}@mysql:3306/${MYSQL_DATABASE:-invoicer}
+        DB_PROVIDER: mysql
     container_name: invoicer-app
     ports:
       - "${APP_PORT:-3000}:3000"

@@ -1,6 +1,6 @@
 # =============================================
 # INVOICER - Multi-stage Dockerfile
-# Auto-detects MySQL vs SQLite from DATABASE_URL
+# Set DB_PROVIDER=mysql or DB_PROVIDER=sqlite (default)
 # =============================================
 
 # ---- Stage 1: Dependencies ----
@@ -21,15 +21,16 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ARG DATABASE_URL
+ARG DB_PROVIDER=sqlite
 ENV DATABASE_URL=${DATABASE_URL}
 
-# Auto-detect DB provider from DATABASE_URL and swap schema accordingly
-# Prisma Client bakes in the provider at generate time
-RUN if echo "$DATABASE_URL" | grep -qi "^mysql"; then \
-      echo "[BUILD] Detected MySQL, swapping schema..."; \
-      mv prisma/schema.mysql.prisma prisma/schema.prisma; \
+# Swap schema based on explicit DB_PROVIDER arg
+# Uses cp (not mv) so it's idempotent and safe
+RUN if [ "$DB_PROVIDER" = "mysql" ] && [ -f prisma/schema.mysql.prisma ]; then \
+      cp prisma/schema.mysql.prisma prisma/schema.prisma; \
+      echo "[BUILD] DB_PROVIDER=mysql -> using MySQL schema"; \
     else \
-      echo "[BUILD] Using SQLite schema (default)"; \
+      echo "[BUILD] DB_PROVIDER=$DB_PROVIDER -> using SQLite schema"; \
     fi
 
 RUN bun run db:generate && \
@@ -50,10 +51,13 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy Prisma: schema + generated client only (NOT the CLI)
+# Copy Prisma: schema + generated client only
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy bcryptjs (needed by seed / nextauth)
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 # Copy seed script and CSV data for auto-seed
 COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts
