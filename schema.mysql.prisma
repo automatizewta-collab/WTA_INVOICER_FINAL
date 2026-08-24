@@ -1,0 +1,128 @@
+// ============================================
+// INVOICER - MySQL Production Schema
+// Copy this to prisma/schema.prisma when using MySQL
+// Run: DATABASE_URL="mysql://..." npx prisma db push
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// INVOICER - Commercial Document Management
+// MySQL optimized variant
+// ============================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  role         String   @default("editor")
+  passwordHash String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Company {
+  id                String   @id @default(cuid())
+  name              String
+  type              String
+  contactName       String?  @map("contact_name")
+  address           String?
+  city              String?
+  postalCode        String?  @map("postal_code")
+  state             String?
+  country           String?
+  email             String?
+  phone             String?
+  cnpj              String?
+  stateRegistration String?  @map("state_registration")
+  isDefault         Boolean  @default(false) @map("is_default")
+  logoUrl           String?  @map("logo_url")
+  bankDetails       String?  @map("bank_details")
+  midCode           String?  @map("mid_code")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  sentDocuments     Document[] @relation("SenderDocuments")
+  receivedDocuments Document[] @relation("RecipientDocuments")
+
+  @@map("companies")
+}
+
+model Item {
+  id               String   @id @default(cuid())
+  code             String
+  namePt           String   @map("name_pt")
+  nameEn           String   @map("name_en")
+  nameEs           String?  @map("name_es")
+  unitValueUsd     Float    @map("unit_value_usd")
+  grossWeight      Float    @map("gross_weight")
+  netWeight        Float    @map("net_weight")
+  htsusCode        String?  @map("htsus_code")
+  endUse           String?  @map("end_use")
+  endUseEs         String?  @map("end_use_es")
+  sterileAtImport  String   @default("NO") @map("sterile_at_import")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("items")
+}
+
+model Document {
+  id                 String    @id @default(cuid())
+  documentType       String    @map("document_type")
+  status             String    @default("draft")
+  language           String    @default("en")
+  number             String    @unique
+  date               DateTime  @map("date")
+  senderId           String    @map("sender_id")
+  recipientId        String?   @map("recipient_id")
+  items              Json      @default("[]")
+  dollarExchangeRate  Float?   @map("dollar_exchange_rate")
+  currency           String    @default("USD")
+  htsusColumnTitle   String?   @map("htsus_column_title")
+  showSterileColumn  Boolean   @default(false) @map("show_sterile_column")
+  showEndUseColumn   Boolean   @default(false) @map("show_end_use_column")
+  originProformaId   String?   @map("origin_proforma_id")
+  contactName        String?   @map("contact_name")
+  contactPhone       String?   @map("contact_phone")
+  recipientInfo      Json?     @map("recipient_info")
+  orderNumber        String?   @map("order_number")
+  purpose            String?   @map("purpose")
+  paymentTerms       String?   @map("payment_terms")
+  shipmentDetails    Json?     @map("shipment_details")
+  financialDetails   Json?     @map("financial_details")
+  notes              Json      @default("[]")
+  pdfUrl             String?   @map("pdf_url")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  sender    Company  @relation("SenderDocuments", fields: [senderId], references: [id])
+  recipient Company? @relation("RecipientDocuments", fields: [recipientId], references: [id])
+
+  @@map("documents")
+}
+
+model DocumentSequence {
+  id         String @id @default(cuid())
+  yearMonth  String @unique @map("year_month")
+  lastNumber Int    @default(0) @map("last_number")
+
+  @@map("document_sequences")
+}
+
+model AppSetting {
+  id        String @id @default(cuid())
+  key       String @unique
+  value     String
+
+  @@map("app_settings")
+}

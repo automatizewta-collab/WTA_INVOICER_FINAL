@@ -6,8 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -58,6 +56,8 @@ export function NewDocumentView() {
   const [contactPhone, setContactPhone] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("");
   const [erpDialogOpen, setErpDialogOpen] = useState(false);
   const [erpImporting, setErpImporting] = useState(false);
   const [recipientInfo, setRecipientInfo] = useState<RecipientInfo>({});
@@ -143,7 +143,8 @@ export function NewDocumentView() {
       financialDetails: { ...financialDetails, total_value: totalValue },
       notes, contactName: contactName || null, contactPhone: contactPhone || null,
       orderNumber: orderNumber || null,
-      customNumber: orderNumber || undefined,
+      purpose: purpose || null,
+      paymentTerms: paymentTerms || null,
       recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
     });
   };
@@ -434,27 +435,6 @@ export function NewDocumentView() {
               </div>
             </div>
           )}
-          {showRecipientFields && (
-            <div className="pt-3 border-t space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Endereço de entrega diferente?</Label>
-                <Switch
-                  checked={!!recipientInfo.hasDeliveryAddress}
-                  onCheckedChange={(checked) =>
-                    setRecipientInfo({ ...recipientInfo, hasDeliveryAddress: checked, deliveryAddress: checked ? recipientInfo.deliveryAddress || "" : "" })
-                  }
-                />
-              </div>
-              {recipientInfo.hasDeliveryAddress && (
-                <Textarea
-                  placeholder="Digite o endereço de entrega alternativo..."
-                  value={recipientInfo.deliveryAddress || ""}
-                  onChange={(e) => setRecipientInfo({ ...recipientInfo, deliveryAddress: e.target.value })}
-                  className="min-h-[60px] text-sm"
-                />
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -544,6 +524,28 @@ export function NewDocumentView() {
                 </p>
               )}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Order Reference, Purpose, Payment Terms */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Order Information</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Order Reference (Client / ERP)</Label>
+            <Input placeholder="Número do pedido no ERP do cliente" value={orderNumber}
+              onChange={(e) => setOrderNumber(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Purpose</Label>
+            <Input placeholder="e.g.: Commercial export of medical devices" value={purpose}
+              onChange={(e) => setPurpose(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Payment Terms</Label>
+            <Input placeholder="e.g.: 30% advance, 70% before shipment" value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)} />
           </div>
         </CardContent>
       </Card>

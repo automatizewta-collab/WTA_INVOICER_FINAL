@@ -7,8 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -75,6 +73,9 @@ export function EditDocumentView() {
   const [financialDetails, setFinancialDetails] = useState<FinancialDetails>(emptyFinancial);
   const [notes, setNotes] = useState<string[]>([]);
   const [recipientInfo, setRecipientInfo] = useState<RecipientInfo>({});
+  const [orderNumber, setOrderNumber] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("");
 
   const { data: doc, isLoading: docLoading } = useQuery<DocumentWithRelations>({
     queryKey: ["document", editDocumentId],
@@ -97,33 +98,10 @@ export function EditDocumentView() {
   const catalogItems = catalogData?.items ?? [];
 
   // Populate form when document loads
-  // Wait for BOTH doc and catalogItems before initializing,
-  // so we can enrich document items with latest catalog data
   const initRef = useRef(false);
   useEffect(() => {
-    if (doc && catalogItems.length > 0 && !initRef.current) {
+    if (doc && !initRef.current) {
       initRef.current = true;
-      // Enrich document items with latest catalog data
-      // Keeps document-specific fields (qty, price, discount) but updates
-      // catalog fields (name, code, htsus, weights, end_use) from the live catalog
-      const docItems = Array.isArray(doc.items) ? doc.items : [];
-      const enrichedItems = docItems.map((docItem) => {
-        const catalog = catalogItems.find((c) => c.id === docItem.item_id);
-        if (!catalog) return docItem;
-        return {
-          ...docItem,
-          code: catalog.code || docItem.code,
-          name_pt: catalog.namePt || docItem.name_pt,
-          name_en: catalog.nameEn || docItem.name_en,
-          name_es: catalog.nameEs || docItem.name_es,
-          end_use: catalog.endUse || docItem.end_use,
-          end_use_es: catalog.endUseEs || docItem.end_use_es,
-          htsus_code: catalog.htsusCode || docItem.htsus_code,
-          gross_weight: catalog.grossWeight ?? docItem.gross_weight,
-          net_weight: catalog.netWeight ?? docItem.net_weight,
-          sterile_at_import: catalog.sterileAtImport || docItem.sterile_at_import,
-        };
-      });
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-time form initialization from API data
       void (doc && (setDocumentType(doc.documentType as DocumentType),
       setStatus(doc.status),
@@ -136,13 +114,16 @@ export function EditDocumentView() {
       setShowEndUseColumn(doc.showEndUseColumn),
       setSenderId(doc.senderId),
       setRecipientId(doc.recipientId || ""),
-      setItems(enrichedItems),
+      setItems(Array.isArray(doc.items) ? doc.items : []),
       setShipmentDetails({ ...emptyShipment, ...doc.shipmentDetails, boxes: Array.isArray(doc.shipmentDetails?.boxes) ? doc.shipmentDetails.boxes : [] }),
       setFinancialDetails({ ...emptyFinancial, ...doc.financialDetails }),
       setNotes(Array.isArray(doc.notes) ? doc.notes : []),
-      setRecipientInfo(doc.recipientInfo || {})));
+      setRecipientInfo(doc.recipientInfo || {}),
+      setOrderNumber(doc.orderNumber || ""),
+      setPurpose(doc.purpose || ""),
+      setPaymentTerms(doc.paymentTerms || "")));
     }
-  }, [doc, catalogItems]);
+  }, [doc]);
 
   const updateMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -173,7 +154,7 @@ export function EditDocumentView() {
           htsusColumnTitle: htsusColumnTitle || null,
           showSterileColumn, showEndUseColumn, shipmentDetails,
           financialDetails: { ...financialDetails, total_value: totalValue },
-          notes, status: "issued",
+          notes, orderNumber: orderNumber || null, purpose: purpose || null, paymentTerms: paymentTerms || null, status: "issued",
           recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
         }),
       });
@@ -212,7 +193,7 @@ export function EditDocumentView() {
       htsusColumnTitle: htsusColumnTitle || null, showSterileColumn, showEndUseColumn,
       shipmentDetails,
       financialDetails: { ...financialDetails, total_value: totalValue },
-      notes,
+      notes, orderNumber: orderNumber || null, purpose: purpose || null, paymentTerms: paymentTerms || null,
       recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
     });
   };
@@ -426,27 +407,6 @@ export function EditDocumentView() {
               </div>
             </div>
           )}
-          {showRecipientFields && (
-            <div className="pt-3 border-t space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Endereço de entrega diferente?</Label>
-                <Switch
-                  checked={!!recipientInfo.hasDeliveryAddress}
-                  onCheckedChange={(checked) =>
-                    setRecipientInfo({ ...recipientInfo, hasDeliveryAddress: checked, deliveryAddress: checked ? recipientInfo.deliveryAddress || "" : "" })
-                  }
-                />
-              </div>
-              {recipientInfo.hasDeliveryAddress && (
-                <Textarea
-                  placeholder="Digite o endereço de entrega alternativo..."
-                  value={recipientInfo.deliveryAddress || ""}
-                  onChange={(e) => setRecipientInfo({ ...recipientInfo, deliveryAddress: e.target.value })}
-                  className="min-h-[60px] text-sm"
-                />
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -535,6 +495,28 @@ export function EditDocumentView() {
                 </p>
               )}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Order Reference, Purpose, Payment Terms */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Order Information</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Order Reference (Client / ERP)</Label>
+            <Input placeholder="Número do pedido no ERP do cliente" value={orderNumber}
+              onChange={(e) => setOrderNumber(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Purpose</Label>
+            <Input placeholder="e.g.: Commercial export of medical devices" value={purpose}
+              onChange={(e) => setPurpose(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Payment Terms</Label>
+            <Input placeholder="e.g.: 30% advance, 70% before shipment" value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)} />
           </div>
         </CardContent>
       </Card>

@@ -52,8 +52,6 @@ export const recipientInfoSchema = z.object({
   state: z.string().optional(),
   postalCode: z.string().optional(),
   country: z.string().optional(),
-  hasDeliveryAddress: z.boolean().optional(),
-  deliveryAddress: z.string().optional(),
 }).partial();
 
 // ── Create schema (POST /api/documents) ──
@@ -77,8 +75,10 @@ export const documentCreateSchema = z.object({
   contactName: z.string().optional().nullable(),
   contactPhone: z.string().optional().nullable(),
   orderNumber: z.string().optional().nullable(),
+  purpose: z.string().optional().nullable(),
+  paymentTerms: z.string().optional().nullable(),
   recipientInfo: recipientInfoSchema.optional().nullable(),
-  // If provided, used as document number (ERP import)
+  // If provided, used as document number (manual override only)
   customNumber: z.string().optional(),
 });
 
@@ -102,4 +102,7 @@ export const documentUpdateSchema = z.object({
   financialDetails: financialDetailsSchema.optional().nullable(),
   notes: z.array(z.string()).optional(),
   recipientInfo: recipientInfoSchema.optional().nullable(),
+  orderNumber: z.string().optional().nullable(),
+  purpose: z.string().optional().nullable(),
+  paymentTerms: z.string().optional().nullable(),
 });
