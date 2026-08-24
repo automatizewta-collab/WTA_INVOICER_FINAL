@@ -1,6 +1,6 @@
 # =============================================
-# INVOICER - Multi-stage Dockerfile (MySQL)
-# Production-ready with auto-seed on first boot
+# INVOICER - Multi-stage Dockerfile
+# Auto-detects MySQL vs SQLite from DATABASE_URL
 # =============================================
 
 # ---- Stage 1: Dependencies ----
@@ -23,9 +23,14 @@ COPY . .
 ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
-# CRITICAL: Swap to MySQL schema BEFORE generating Prisma Client
+# Auto-detect DB provider from DATABASE_URL and swap schema accordingly
 # Prisma Client bakes in the provider at generate time
-RUN mv prisma/schema.mysql.prisma prisma/schema.prisma
+RUN if echo "$DATABASE_URL" | grep -qi "^mysql"; then \
+      echo "[BUILD] Detected MySQL, swapping schema..."; \
+      mv prisma/schema.mysql.prisma prisma/schema.prisma; \
+    else \
+      echo "[BUILD] Using SQLite schema (default)"; \
+    fi
 
 RUN bun run db:generate && \
     bun run build
@@ -70,7 +75,5 @@ ENV HOSTNAME="0.0.0.0"
 
 # Copy and set entrypoint
 COPY --chmod=755 docker-entrypoint.sh ./docker-entrypoint.sh
-# Copy runtime deps needed by seed script (bcryptjs) and /api/init
-COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
