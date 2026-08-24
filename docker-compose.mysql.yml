@@ -2,6 +2,7 @@
 # INVOICER - MySQL Production Setup
 # Uses MySQL 8.0 as the database backend
 # Auto-seeds 452 products on first boot
+# Includes Adminer (dataminer) for DB inspection
 # =============================================
 
 services:
@@ -34,6 +35,8 @@ services:
     container_name: invoicer-app
     ports:
       - "${APP_PORT:-3000}:3000"
+    env_file:
+      - .env.docker
     environment:
       - DATABASE_URL=mysql://${MYSQL_USER:-invoicer}:${MYSQL_PASSWORD:-invoicerpassword}@mysql:3306/${MYSQL_DATABASE:-invoicer}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-to-a-random-32-char-string}
@@ -42,6 +45,19 @@ services:
       mysql:
         condition: service_healthy
     restart: unless-stopped
+
+  dataminer:
+    image: adminer:latest
+    container_name: invoicer-dataminer
+    restart: unless-stopped
+    ports:
+      - "${DATAMINER_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+      ADMINER_DESIGN: pepa-linha
 
 volumes:
   mysql-data:

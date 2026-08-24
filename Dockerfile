@@ -25,7 +25,6 @@ ARG DB_PROVIDER=sqlite
 ENV DATABASE_URL=${DATABASE_URL}
 
 # Swap schema based on explicit DB_PROVIDER arg
-# Uses cp (not mv) so it's idempotent and safe
 RUN if [ "$DB_PROVIDER" = "mysql" ] && [ -f prisma/schema.mysql.prisma ]; then \
       cp prisma/schema.mysql.prisma prisma/schema.prisma; \
       echo "[BUILD] DB_PROVIDER=mysql -> using MySQL schema"; \
@@ -51,9 +50,11 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy Prisma: schema + generated client only
+# Copy Prisma schemas (both files for runtime swap)
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# Copy @prisma/client runtime package (needed by Next.js API routes)
+# Do NOT copy node_modules/.prisma — it will be generated at runtime
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Copy bcryptjs (needed by seed / nextauth)
@@ -64,10 +65,10 @@ COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts
 COPY --from=builder /app/upload/itens.csv ./upload/itens.csv
 
 # Create data directories
-RUN mkdir -p /app/data /app/data/uploads /app/data/pdfs /app/upload && \
+RUN mkdir -p /app/data /app/data/uploads /app/data/pdfs /app/upload /app/node_modules/.prisma && \
     chown -R nextjs:nodejs /app
 
-# Install bun (for seed) and prisma CLI (for db push) globally
+# Install bun (for seed) and prisma CLI (for db push + generate) globally
 RUN npm install -g bun && npm install -g prisma@6
 
 USER nextjs
