@@ -64,6 +64,8 @@ export interface RecipientInfo {
   state?: string;
   postalCode?: string;
   country?: string;
+  hasDeliveryAddress?: boolean;
+  deliveryAddress?: string;
 }
 
 export interface DocumentWithRelations {
@@ -86,6 +88,8 @@ export interface DocumentWithRelations {
   contactPhone: string | null;
   recipientInfo: RecipientInfo | null;
   orderNumber: string | null;
+  paymentTerms: string | null;
+  purpose: string | null;
   shipmentDetails: ShipmentDetails | null;
   financialDetails: FinancialDetails | null;
   notes: string[];

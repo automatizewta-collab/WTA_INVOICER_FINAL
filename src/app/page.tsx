@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import type { CurrentUser } from "@/lib/store";
 import {
   Sidebar,
   SidebarContent,
@@ -19,7 +17,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { FileText, LayoutDashboard, Package, PlusCircle, Building2, Settings, LogOut } from "lucide-react";
+import { FileText, LayoutDashboard, Package, PlusCircle, Building2, Settings } from "lucide-react";
 import { LoginPage } from "@/components/views/LoginView";
 import { DashboardView } from "@/components/views/DashboardView";
 import { DocumentsView } from "@/components/views/DocumentsView";
@@ -28,7 +26,6 @@ import { EditDocumentView } from "@/components/views/EditDocumentView";
 import { ItemsView } from "@/components/views/ItemsView";
 import { CompaniesView } from "@/components/views/CompaniesView";
 import { SettingsView } from "@/components/views/SettingsView";
-import { Button } from "@/components/ui/button";
 import type { ViewName } from "@/lib/types";
 
 const navItems: { view: ViewName; label: string; icon: typeof FileText }[] = [
@@ -44,6 +41,8 @@ function ViewRouter() {
   const currentView = useAppStore((s) => s.currentView);
 
   switch (currentView) {
+    case "login":
+      return <LoginPage />;
     case "dashboard":
       return <DashboardView />;
     case "documents":
@@ -66,18 +65,24 @@ function ViewRouter() {
 function AppSidebar() {
   const currentView = useAppStore((s) => s.currentView);
   const navigate = useAppStore((s) => s.navigate);
-  const currentUser = useAppStore((s) => s.currentUser);
-  const logout = useAppStore((s) => s.logout);
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
-          <FileText className="h-5 w-5 shrink-0" />
+        <button
+          type="button"
+          onClick={() => navigate("dashboard")}
+          className="flex items-center gap-2 px-2 py-1 hover:opacity-80 transition-opacity cursor-pointer w-full text-left"
+        >
+          <img
+            src="/logos/wta-logo-hd.png"
+            alt="Logo"
+            className="h-8 w-auto max-w-[140px] object-contain shrink-0"
+          />
           <span className="font-semibold text-sm group-data-[collapsible=icon]:hidden">
             Invoicer
           </span>
-        </div>
+        </button>
         <Separator className="mx-2" />
       </SidebarHeader>
 
@@ -104,23 +109,6 @@ function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        {currentUser && (
-          <div className="flex items-center justify-between px-4 py-2 border-t mb-1">
-            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-              <p className="text-xs font-medium truncate">{currentUser.name || currentUser.email}</p>
-              <p className="text-xs text-muted-foreground truncate">{currentUser.role}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={logout}
-              title="Logout"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
         <div className="px-4 py-2">
           <p className="text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
             Invoicer v1.0.0
@@ -145,7 +133,7 @@ function AppHeader() {
   );
 }
 
-function AppLayout() {
+export default function HomePage() {
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -162,45 +150,4 @@ function AppLayout() {
       </SidebarInset>
     </SidebarProvider>
   );
-}
-
-function isValidUser(u: unknown): u is CurrentUser {
-  return (
-    typeof u === "object" &&
-    u !== null &&
-    typeof (u as Record<string, unknown>).id === "string" &&
-    typeof (u as Record<string, unknown>).email === "string" &&
-    typeof (u as Record<string, unknown>).role === "string"
-  );
-}
-
-export default function HomePage() {
-  const currentView = useAppStore((s) => s.currentView);
-  const currentUser = useAppStore((s) => s.currentUser);
-
-  // Restore session from localStorage on mount (with validation)
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("invoicer_user");
-      if (saved) {
-        const user: unknown = JSON.parse(saved);
-        if (isValidUser(user)) {
-          useAppStore.setState({ currentUser: user, currentView: "dashboard" });
-          // Ensure DB state is correct on restore
-          fetch("/api/init", { method: "POST" }).catch(() => {});
-        } else {
-          localStorage.removeItem("invoicer_user");
-        }
-      }
-    } catch {
-      localStorage.removeItem("invoicer_user");
-    }
-  }, []);
-
-  // Always show login if no authenticated user
-  if (!currentUser || currentView === "login") {
-    return <LoginPage />;
-  }
-
-  return <AppLayout />;
 }

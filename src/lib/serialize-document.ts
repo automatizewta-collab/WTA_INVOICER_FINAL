@@ -1,5 +1,3 @@
-import { safeJsonParse } from "./utils";
-
 // ============================================
 // INVOICER - Shared Document Serializer
 // Single source of truth for converting Prisma rows to API responses.
@@ -26,6 +24,8 @@ interface SerializedDocument {
   contactPhone: string | null;
   recipientInfo: Record<string, unknown> | null;
   orderNumber: string | null;
+  paymentTerms: string | null;
+  purpose: string | null;
   shipmentDetails: Record<string, unknown> | null;
   financialDetails: Record<string, unknown> | null;
   notes: string[];
@@ -46,6 +46,16 @@ interface SerializedDocument {
     city: string | null;
     country: string | null;
   } | null;
+}
+
+function safeJsonParse(value: unknown): unknown {
+  if (!value) return null;
+  if (typeof value === "object") return value; // already parsed
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
 }
 
 function extractSender(doc: Record<string, unknown>): SerializedDocument["sender"] {
@@ -93,6 +103,8 @@ export function serializeDocument(doc: Record<string, unknown>): SerializedDocum
     contactPhone: doc.contactPhone ? String(doc.contactPhone) : null,
     recipientInfo: safeJsonParse(doc.recipientInfo) as Record<string, unknown> | null,
     orderNumber: doc.orderNumber ? String(doc.orderNumber) : null,
+    paymentTerms: doc.paymentTerms ? String(doc.paymentTerms) : null,
+    purpose: doc.purpose ? String(doc.purpose) : null,
     shipmentDetails: safeJsonParse(doc.shipmentDetails) as Record<string, unknown> | null,
     financialDetails: safeJsonParse(doc.financialDetails) as Record<string, unknown> | null,
     notes: (safeJsonParse(doc.notes) as string[]) || [],

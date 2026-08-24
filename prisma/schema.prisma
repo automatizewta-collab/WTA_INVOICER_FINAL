@@ -90,6 +90,8 @@ model Document {
   contactPhone       String?   @map("contact_phone")
   recipientInfo      String?   @map("recipient_info")
   orderNumber        String?   @map("order_number")
+  paymentTerms       String?   @map("payment_terms")
+  purpose            String?   @map("purpose")
   shipmentDetails    String?   @map("shipment_details")
   financialDetails   String?   @map("financial_details")
   notes              String?   @default("[]")

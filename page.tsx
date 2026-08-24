@@ -72,14 +72,21 @@ function AppSidebar() {
   const [senderLogo, setSenderLogo] = useState("");
 
   useEffect(() => {
-    if (!currentUser) return;
-    apiFetch<{ items: Array<{ id: string; type: string; isDefault: boolean; logoUrl: string | null }> }>("/api/companies?type=all")
-      .then((data) => {
-        const items = data?.items ?? data ?? [];
-        const def = items.find((c) => c.type === "sender" && c.isDefault);
-        if (def?.logoUrl) setSenderLogo(def.logoUrl);
-      })
-      .catch(() => {});
+    // Try to load the hardcoded logo
+    const img = new Image();
+    img.onload = () => setSenderLogo("/logos/wta-logo-hd.png");
+    img.onerror = () => {
+      // Fallback: try fetching from companies API
+      if (!currentUser) return;
+      apiFetch<{ items: Array<{ id: string; type: string; isDefault: boolean; logoUrl: string | null }> }>("/api/companies?type=all")
+        .then((data) => {
+          const items = data?.items ?? data ?? [];
+          const def = items.find((c) => c.type === "sender" && c.isDefault);
+          if (def?.logoUrl) setSenderLogo(def.logoUrl);
+        })
+        .catch(() => {});
+    };
+    img.src = "/logos/wta-logo-hd.png";
   }, [currentUser]);
 
   return (

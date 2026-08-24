@@ -39,10 +39,10 @@ async function getLogoBase64(
   sender: Record<string, unknown> | null,
 ): Promise<string | null> {
   const logoPaths = [
+    join(process.cwd(), "public", "logos", "wta-logo-hd.png"),
     sender?.logoUrl
       ? join(process.cwd(), "public", String(sender.logoUrl).replace(/^\//, ""))
       : null,
-    join(process.cwd(), "public", "logos", "wta-logo.png"),
   ].filter(Boolean) as string[];
 
   for (const p of logoPaths) {
@@ -238,15 +238,21 @@ function buildPdfHtml(
   const rPostalCode = recipientOverrides.postalCode || (recipient?.postalCode || "");
   const rCountry = recipientOverrides.country || (recipient?.country || "");
 
-  // ── Delivery address ──
+  // ── Delivery address (separate container) ──
   const ri = (doc.recipientInfo && typeof doc.recipientInfo === "object") ? doc.recipientInfo as Record<string, unknown> : {};
   const hasDeliveryAddr = !!ri.hasDeliveryAddress && !!ri.deliveryAddress;
-  const deliveryAddrHtml = hasDeliveryAddr
-    ? '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed ' + borderC + '">' +
-      '<p style="font-weight:700;font-size:10px;color:' + accent + ';letter-spacing:0.3px;text-transform:uppercase;margin-bottom:3px">' + (isEs ? "Entregar en" : "Deliver To") + "</p>" +
-      '<p style="color:#334155;font-size:10px;line-height:1.5">' + esc(String(ri.deliveryAddress)).replace(/\n/g, "<br>") + "</p>" +
-      "</div>"
-    : "";
+  let deliveryHtml = "";
+  if (hasDeliveryAddr) {
+    deliveryHtml =
+      '<div style="background:#ffffff;border:2px solid ' + accent + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+      '<div style="background:' + accent + ';padding:6px 16px;display:flex;align-items:center;gap:6px">' +
+      '<p style="font-weight:700;font-size:10px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Entregar en" : "Deliver To") + '</p>' +
+      '<span style="font-size:8px;color:rgba(255,255,255,0.7);background:rgba(255,255,255,0.15);padding:1px 6px;border-radius:3px">' + (isEs ? "Direccion alternativa" : "Alternate Address") + '</span>' +
+      '</div>' +
+      '<div style="padding:12px 16px;font-size:11px">' +
+      '<p style="color:#334155;line-height:1.6">' + String(ri.deliveryAddress).replace(/\\n/g, "\n").split("\n").map(l => esc(l)).join("<br>") + '</p>' +
+      '</div></div>';
+  }
 
   // ── Recipient block ──
   let recipientHtml = "";
@@ -263,7 +269,6 @@ function buildPdfHtml(
       '<p style="color:#475569">' + esc(rCountry) + "</p>" +
       (doc.contactName ? '<p style="margin-top:6px;padding-top:6px;border-top:1px solid ' + borderC + ';color:#475569;font-size:10px">' + (isEs ? "Contacto" : "Contact") + ": <strong style=\"color:#0f172a\">" + esc(doc.contactName) + "</strong>" + (doc.contactPhone ? ' <span style="color:#94a3b8">|</span> ' + esc(doc.contactPhone) : "") + "</p>" : "") +
       (rEmail ? '<p style="color:#94a3b8;font-size:10px;margin-top:2px">' + esc(rEmail) + "</p>" : "") +
-      deliveryAddrHtml +
       "</div></div>";
   }
 
@@ -311,21 +316,45 @@ function buildPdfHtml(
       "</div>";
   }
 
-  // ── Sender / Recipient row ──
+  // ── Sender / Recipient / Delivery row ──
   let partyRowHtml = "";
   if (logoDataUri && sender) {
-    partyRowHtml =
-      '<div style="margin-top:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:24px">' +
-        '<div style="font-size:11px;flex:1;background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
-          '<div style="background:' + primary + ';padding:6px 16px">' +
-          '<p style="font-weight:700;font-size:10px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Remetente" : "From") + "</p>" +
+    if (hasDeliveryAddr) {
+      // 3 containers: From (left) + Ship To (center-right) on row 1, Deliver To (right-aligned) on row 2
+      partyRowHtml =
+        '<div style="margin-top:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:24px">' +
+          '<div style="font-size:11px;flex:1;background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+            '<div style="background:' + primary + ';padding:6px 16px">' +
+            '<p style="font-weight:700;font-size:10px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Remetente" : "From") + "</p>" +
+            "</div>" +
+            '<div style="padding:12px 16px">' + senderInfoHtml + "</div>" +
           "</div>" +
-          '<div style="padding:12px 16px">' + senderInfoHtml + "</div>" +
+          '<div style="flex:1">' + recipientHtml + "</div>" +
         "</div>" +
-        '<div style="flex:1">' + recipientHtml + "</div>" +
-      "</div>";
+        '<div style="margin-top:12px;display:flex;justify-content:flex-end">' +
+          '<div style="width:calc(50% - 12px)">' + deliveryHtml + "</div>" +
+        "</div>";
+    } else {
+      partyRowHtml =
+        '<div style="margin-top:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:24px">' +
+          '<div style="font-size:11px;flex:1;background:#ffffff;border:1px solid ' + borderC + ';border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">' +
+            '<div style="background:' + primary + ';padding:6px 16px">' +
+            '<p style="font-weight:700;font-size:10px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase">' + (isEs ? "Remetente" : "From") + "</p>" +
+            "</div>" +
+            '<div style="padding:12px 16px">' + senderInfoHtml + "</div>" +
+          "</div>" +
+          '<div style="flex:1">' + recipientHtml + "</div>" +
+        "</div>";
+    }
   } else {
-    partyRowHtml = '<div style="margin-top:20px">' + recipientHtml + "</div>";
+    if (hasDeliveryAddr) {
+      // No logo: Ship To on row 1, Deliver To on row 2
+      partyRowHtml =
+        '<div style="margin-top:20px">' + recipientHtml + "</div>" +
+        '<div style="margin-top:12px">' + deliveryHtml + "</div>";
+    } else {
+      partyRowHtml = '<div style="margin-top:20px">' + recipientHtml + "</div>";
+    }
   }
 
   // ── Table headers ──

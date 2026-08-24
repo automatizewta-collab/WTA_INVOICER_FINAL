@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Trash2, ArrowUp, ArrowDown, AlertCircle } from "lucide-react";
 import type { DocumentItem, DocumentLanguage, Item } from "@/lib/types";
-import { calcLineTotal, calcBrl, fmtBrl } from "@/lib/document-calculations";
+import { calcLineTotal } from "@/lib/document-calculations";
 
 interface DocumentItemsTableProps {
   items: DocumentItem[];
@@ -95,8 +95,6 @@ export function DocumentItemsTable({
   };
 
   const htsusLabel = htsusColumnTitle || "HTSUS Code";
-  const showBrl = !!dollarExchangeRate && dollarExchangeRate > 0;
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -116,10 +114,8 @@ export function DocumentItemsTable({
               <TableHead className="min-w-[200px]">Descrição (PT)</TableHead>
               <TableHead className="w-20">Qtd</TableHead>
               <TableHead className="w-28">Preço USD</TableHead>
-              {showBrl && <TableHead className="w-28">Preço BRL</TableHead>}
               <TableHead className="w-20">Desc %</TableHead>
               <TableHead className="w-28">Total USD</TableHead>
-              {showBrl && <TableHead className="w-28">Total BRL</TableHead>}
               <TableHead className="w-24">P.B.</TableHead>
               <TableHead className="w-24">P.L.</TableHead>
               <TableHead className="w-28">{htsusLabel}</TableHead>
@@ -131,7 +127,7 @@ export function DocumentItemsTable({
             {safeItems.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={12 + (showBrl ? 2 : 0)}
+                  colSpan={11}
                   className="text-center py-8 text-muted-foreground text-sm"
                 >
                   Nenhum item. Clique &quot;Adicionar Item&quot; para começar.
@@ -144,9 +140,7 @@ export function DocumentItemsTable({
               const description = catalogItem?.namePt || "";
               const needsPrice = !item.unit_price || item.unit_price === 0;
 
-              const unitBrl = showBrl && dollarExchangeRate ? calcBrl(item.unit_price, dollarExchangeRate) : 0;
               const lineTotal = calcLineTotal(item);
-              const lineBrl = showBrl && dollarExchangeRate ? calcBrl(lineTotal, dollarExchangeRate) : 0;
 
               return (
                 <TableRow key={index} className={needsPrice ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
@@ -198,12 +192,6 @@ export function DocumentItemsTable({
                       className="h-8 text-xs" />
                   </TableCell>
 
-                  {showBrl && (
-                    <TableCell className="text-xs tabular-nums text-muted-foreground">
-                      {fmtBrl(unitBrl)}
-                    </TableCell>
-                  )}
-
                   <TableCell>
                     <Input type="number" min={0} max={100} value={item.discount}
                       onChange={(e) => updateItem(index, "discount", parseFloat(e.target.value) || 0)}
@@ -211,14 +199,13 @@ export function DocumentItemsTable({
                   </TableCell>
 
                   <TableCell className="text-xs font-medium tabular-nums">
-                    {lineTotal.toFixed(2)}
+                    <span>{lineTotal.toFixed(2)}</span>
+                    {dollarExchangeRate && dollarExchangeRate > 0 && lineTotal > 0 && (
+                      <span className="block text-[10px] font-normal text-muted-foreground">
+                        ≈ R${(lineTotal * dollarExchangeRate).toFixed(2)}
+                      </span>
+                    )}
                   </TableCell>
-
-                  {showBrl && (
-                    <TableCell className="text-xs tabular-nums text-muted-foreground">
-                      {fmtBrl(lineBrl)}
-                    </TableCell>
-                  )}
 
                   <TableCell>
                     <Input type="number" min={0} step="0.01" value={item.gross_weight}
@@ -280,12 +267,11 @@ export function DocumentItemsTable({
                 ${safeItems.reduce((sum, item) => sum + calcLineTotal(item), 0).toFixed(2)}
               </span>
             </p>
-            {showBrl && dollarExchangeRate && (
-              <p className="text-sm font-medium text-muted-foreground">
-                Total BRL: {" "}
-                <span className="text-base font-bold text-foreground">
-                  {fmtBrl(calcBrl(safeItems.reduce((sum, item) => sum + calcLineTotal(item), 0), dollarExchangeRate))}
-                </span>
+            {dollarExchangeRate && dollarExchangeRate > 0 && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ≈ BRL {" "}
+                {(safeItems.reduce((sum, item) => sum + calcLineTotal(item), 0) * dollarExchangeRate).toFixed(2)}
+                {" "}(câmbio: {dollarExchangeRate.toFixed(4)})
               </p>
             )}
           </div>

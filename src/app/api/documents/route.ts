@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { startOfMonth, format, parseISO } from "date-fns";
 import { documentCreateSchema } from "@/lib/document-schemas";
 import { serializeDocument } from "@/lib/serialize-document";
-import { safeJsonParse } from "@/lib/utils";
 import { z } from "zod";
 
 export async function GET(request: NextRequest) {
@@ -38,8 +37,12 @@ export async function GET(request: NextRequest) {
       select: { financialDetails: true },
     });
     const totalValue = issuedDocs.reduce((sum, doc) => {
-      const fd = safeJsonParse(doc.financialDetails) as Record<string, number> | null;
-      return sum + (fd?.total_value || 0);
+      try {
+        const fd = JSON.parse(doc.financialDetails);
+        return sum + (fd.total_value || 0);
+      } catch {
+        return sum;
+      }
     }, 0);
 
     return NextResponse.json({
