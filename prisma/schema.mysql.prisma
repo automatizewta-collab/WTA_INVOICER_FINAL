@@ -19,13 +19,14 @@ datasource db {
 // ============================================
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  role         String   @default("editor")
-  passwordHash String?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id               String     @id @default(cuid())
+  email            String     @unique
+  name             String?
+  role             String     @default("editor")
+  passwordHash     String?
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  createdDocuments  Document[] @relation("CreatedDocuments")
 
   @@map("users")
 }
@@ -67,8 +68,8 @@ model Item {
   grossWeight      Float    @map("gross_weight")
   netWeight        Float    @map("net_weight")
   htsusCode        String?  @map("htsus_code")
-  endUse           String?  @db.Text @map("end_use")
-  endUseEs         String?  @db.Text @map("end_use_es")
+  endUse           String?  @map("end_use")
+  endUseEs         String?  @map("end_use_es")
   sterileAtImport  String   @default("NO") @map("sterile_at_import")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
@@ -96,6 +97,8 @@ model Document {
   contactPhone       String?   @map("contact_phone")
   recipientInfo      Json?     @map("recipient_info")
   orderNumber        String?   @map("order_number")
+  purpose            String?   @map("purpose")
+  paymentTerms       String?   @map("payment_terms")
   shipmentDetails    Json?     @map("shipment_details")
   financialDetails   Json?     @map("financial_details")
   notes              Json      @default("[]")
@@ -103,8 +106,10 @@ model Document {
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  sender    Company  @relation("SenderDocuments", fields: [senderId], references: [id])
-  recipient Company? @relation("RecipientDocuments", fields: [recipientId], references: [id])
+  sender      Company  @relation("SenderDocuments", fields: [senderId], references: [id])
+  recipient   Company? @relation("RecipientDocuments", fields: [recipientId], references: [id])
+  createdBy   User?    @relation("CreatedDocuments", fields: [createdById], references: [id])
+  createdById String?  @map("created_by_id")
 
   @@map("documents")
 }

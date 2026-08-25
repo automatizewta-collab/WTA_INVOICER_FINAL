@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
     });
     const totalValue = issuedDocs.reduce((sum, doc) => {
       try {
-        const fd = JSON.parse(doc.financialDetails);
-        return sum + (fd.total_value || 0);
+        const fd = typeof doc.financialDetails === 'string' ? JSON.parse(doc.financialDetails) : (doc.financialDetails || {});
+        return sum + ((fd as Record<string, number>).total_value || 0);
       } catch {
         return sum;
       }
@@ -66,6 +66,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const data = documentCreateSchema.parse(body);
+
+    // Auth: get current user for createdById
+    const session = await getServerSession(authOptions);
+    const currentUser = session?.user as unknown as { id: string; role: string } | undefined;
 
     // Generate number: use custom (OV number) or auto-generate
     let number: string;

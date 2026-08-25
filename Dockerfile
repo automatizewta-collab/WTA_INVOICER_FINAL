@@ -20,6 +20,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+
+
 ARG DATABASE_URL
 ARG DB_PROVIDER=sqlite
 ENV DATABASE_URL=${DATABASE_URL}
@@ -59,6 +61,14 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Copy bcryptjs (needed by seed / nextauth)
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+
+# Copy mssql + deps (external package, not bundled by Next.js standalone)
+COPY --from=builder /app/node_modules/mssql ./node_modules/mssql
+COPY --from=builder /app/node_modules/tedious ./node_modules/tedious
+COPY --from=builder /app/node_modules/tarn ./node_modules/tarn
+COPY --from=builder /app/node_modules/debug ./node_modules/debug
+COPY --from=builder /app/node_modules/ms ./node_modules/ms
+COPY --from=builder /app/node_modules/@tediousjs ./node_modules/@tediousjs
 
 # Copy seed script and CSV data for auto-seed
 COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ViewName } from "./types";
 
-interface CurrentUser {
+export interface AuthUser {
   id: string;
   email: string;
   name: string | null;
@@ -12,24 +12,21 @@ interface AppState {
   currentView: ViewName;
   editDocumentId: string | null;
   sidebarOpen: boolean;
-  currentUser: CurrentUser | null;
+  user: AuthUser | null;
   navigate: (view: ViewName, id?: string | null) => void;
   setSidebarOpen: (open: boolean) => void;
+  setUser: (user: AuthUser | null) => void;
   logout: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  currentView: "login" as ViewName,
+  currentView: "login",
   editDocumentId: null,
   sidebarOpen: true,
-  currentUser: null,
+  user: null,
   navigate: (view, id) =>
     set({ currentView: view, editDocumentId: id ?? null }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  logout: () => {
-    localStorage.removeItem("invoicer_user");
-    set({ currentUser: null, currentView: "login" });
-  },
+  setUser: (user) => set({ user }),
+  logout: () => set({ user: null, currentView: "login" }),
 }));
-
-export type { CurrentUser };

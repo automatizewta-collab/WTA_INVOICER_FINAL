@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { QueryProvider } from "@/providers/query-provider";
+import { AppProvider } from "@/providers/app-provider";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   description:
     "Professional commercial document management system for export operations.",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/favicon.ico",
   },
 };
 
@@ -33,10 +33,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        <QueryProvider>
+        <AppProvider>
           {children}
           <Toaster position="top-right" richColors closeButton />
-        </QueryProvider>
+        </AppProvider>
       </body>
     </html>
   );

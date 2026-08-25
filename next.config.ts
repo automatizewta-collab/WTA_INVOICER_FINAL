@@ -7,6 +7,12 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  serverExternalPackages: ["mssql", "tedious"],
+   turbopack: {
+    resolveAlias: {
+      "@": "./src",
+    },
+  },    
 };
 
 export default nextConfig;

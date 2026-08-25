@@ -17,7 +17,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { FileText, LayoutDashboard, Package, PlusCircle, Building2, Settings } from "lucide-react";
+import { FileText, LayoutDashboard, Package, PlusCircle, Building2, Settings, LogOut } from "lucide-react";
 import { LoginPage } from "@/components/views/LoginView";
 import { DashboardView } from "@/components/views/DashboardView";
 import { DocumentsView } from "@/components/views/DocumentsView";
@@ -65,24 +65,18 @@ function ViewRouter() {
 function AppSidebar() {
   const currentView = useAppStore((s) => s.currentView);
   const navigate = useAppStore((s) => s.navigate);
+  const user = useAppStore((s) => s.user);
+  const logout = useAppStore((s) => s.logout);
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <button
-          type="button"
-          onClick={() => navigate("dashboard")}
-          className="flex items-center gap-2 px-2 py-1 hover:opacity-80 transition-opacity cursor-pointer w-full text-left"
-        >
-          <img
-            src="/logos/wta-logo-hd.png"
-            alt="Logo"
-            className="h-8 w-auto max-w-[140px] object-contain shrink-0"
-          />
+        <div className="flex items-center gap-2 px-2 py-1">
+          <img src="/logos/wta-logo.png" alt="WTA" className="h-5 w-5 shrink-0" />
           <span className="font-semibold text-sm group-data-[collapsible=icon]:hidden">
             Invoicer
           </span>
-        </button>
+        </div>
         <Separator className="mx-2" />
       </SidebarHeader>
 
@@ -109,10 +103,20 @@ function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="px-4 py-2">
-          <p className="text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-            Invoicer v1.0.0
-          </p>
+        <div className="px-4 py-2 space-y-2">
+          {user && (
+            <div className="text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+              <p className="font-medium text-foreground truncate">{user.name || user.email}</p>
+              <p className="capitalize">{user.role}</p>
+            </div>
+          )}
+          <button
+            onClick={logout}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full group-data-[collapsible=icon]:justify-center"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            <span className="group-data-[collapsible=icon]:hidden">Sign Out</span>
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>
@@ -134,6 +138,13 @@ function AppHeader() {
 }
 
 export default function HomePage() {
+  const currentView = useAppStore((s) => s.currentView);
+  const isLogin = currentView === "login";
+
+  if (isLogin) {
+    return <ViewRouter />;
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar />
