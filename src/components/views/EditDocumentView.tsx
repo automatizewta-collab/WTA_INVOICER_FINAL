@@ -35,7 +35,7 @@ import { DocumentItemsTable } from "@/components/shared/DocumentItemsTable";
 import { ShipmentDetailsForm } from "@/components/shared/ShipmentDetailsForm";
 import { NotesForm } from "@/components/shared/NotesForm";
 import { apiFetch } from "@/lib/utils";
-import { calcTotal } from "@/lib/document-calculations";
+import { calcTotal, calcBrl, fmtBrl, calcSubtotal } from "@/lib/document-calculations";
 import {
   ArrowLeft,
   Save,
@@ -74,8 +74,8 @@ export function EditDocumentView() {
   const [notes, setNotes] = useState<string[]>([]);
   const [recipientInfo, setRecipientInfo] = useState<RecipientInfo>({});
   const [orderNumber, setOrderNumber] = useState("");
-  const [paymentTerms, setPaymentTerms] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("");
 
   const { data: doc, isLoading: docLoading } = useQuery<DocumentWithRelations>({
     queryKey: ["document", editDocumentId],
@@ -120,8 +120,8 @@ export function EditDocumentView() {
       setNotes(Array.isArray(doc.notes) ? doc.notes : []),
       setRecipientInfo(doc.recipientInfo || {}),
       setOrderNumber(doc.orderNumber || ""),
-      setPaymentTerms(doc.paymentTerms || ""),
-      setPurpose(doc.purpose || "")));
+      setPurpose(doc.purpose || ""),
+      setPaymentTerms(doc.paymentTerms || "")));
     }
   }, [doc]);
 
@@ -137,7 +137,10 @@ export function EditDocumentView() {
       queryClient.invalidateQueries({ queryKey: ["document", editDocumentId] });
       toast.success("Documento salvo");
     },
-    onError: () => toast.error("Erro ao salvar"),
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Erro ao salvar";
+      toast.error(msg);
+    },
   });
 
   const issueMutation = useMutation({
@@ -154,10 +157,8 @@ export function EditDocumentView() {
           htsusColumnTitle: htsusColumnTitle || null,
           showSterileColumn, showEndUseColumn, shipmentDetails,
           financialDetails: { ...financialDetails, total_value: totalValue },
-          notes, status: "issued",
+          notes, orderNumber: orderNumber || null, purpose: purpose || null, paymentTerms: paymentTerms || null, status: "issued",
           recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
-          paymentTerms: paymentTerms || null,
-          purpose: purpose || null,
         }),
       });
       // Then issue (cascade)
@@ -169,7 +170,10 @@ export function EditDocumentView() {
       toast.success(`Documento emitido! ${count} documento(s) cascata(s) criado(s).`);
       navigate("documents");
     },
-    onError: () => toast.error("Erro ao emitir documento"),
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Erro ao emitir documento";
+      toast.error(msg);
+    },
   });
 
   const generatePdfMutation = useMutation({
@@ -195,10 +199,8 @@ export function EditDocumentView() {
       htsusColumnTitle: htsusColumnTitle || null, showSterileColumn, showEndUseColumn,
       shipmentDetails,
       financialDetails: { ...financialDetails, total_value: totalValue },
-      notes,
+      notes, orderNumber: orderNumber || null, purpose: purpose || null, paymentTerms: paymentTerms || null,
       recipientInfo: (recipientId || Object.keys(recipientInfo).length > 0) ? recipientInfo : null,
-      paymentTerms: paymentTerms || null,
-      purpose: purpose || null,
     });
   };
 
@@ -411,36 +413,6 @@ export function EditDocumentView() {
               </div>
             </div>
           )}
-          {/* Alternate Delivery Address */}
-          <div className="flex items-center gap-3 pt-3 border-t">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="hasDeliveryAddr"
-                checked={!!recipientInfo.hasDeliveryAddress}
-                onCheckedChange={(v) =>
-                  setRecipientInfo({
-                    ...recipientInfo,
-                    hasDeliveryAddress: !!v,
-                    deliveryAddress: v ? recipientInfo.deliveryAddress || "" : "",
-                  })
-                }
-              />
-              <Label htmlFor="hasDeliveryAddr" className="text-sm cursor-pointer">
-                Endereço de entrega diferente
-              </Label>
-            </div>
-          </div>
-          {recipientInfo.hasDeliveryAddress && (
-            <div className="pt-2">
-              <Label className="text-xs text-muted-foreground">Endereço de Entrega</Label>
-              <textarea
-                className="mt-1 w-full min-h-[60px] rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                placeholder="Rua, número, complemento..."
-                value={recipientInfo.deliveryAddress || ""}
-                onChange={(e) => setRecipientInfo({ ...recipientInfo, deliveryAddress: e.target.value })}
-              />
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -478,21 +450,41 @@ export function EditDocumentView() {
               <Label>Desconto (%)</Label>
               <Input type="number" min={0} max={100} value={financialDetails.discount}
                 onChange={(e) => setFinancialDetails({ ...financialDetails, discount: parseFloat(e.target.value) || 0 })} />
+              {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.discount > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  BRL: {fmtBrl(calcBrl(calcSubtotal(items) * financialDetails.discount / 100, dollarExchangeRate))}
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>Frete</Label>
               <Input type="number" min={0} step="0.01" value={financialDetails.shipping_cost}
                 onChange={(e) => setFinancialDetails({ ...financialDetails, shipping_cost: parseFloat(e.target.value) || 0 })} />
+              {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.shipping_cost > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  BRL: {fmtBrl(calcBrl(financialDetails.shipping_cost, dollarExchangeRate))}
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>Seguro</Label>
               <Input type="number" min={0} step="0.01" value={financialDetails.insurance}
                 onChange={(e) => setFinancialDetails({ ...financialDetails, insurance: parseFloat(e.target.value) || 0 })} />
+              {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.insurance > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  BRL: {fmtBrl(calcBrl(financialDetails.insurance, dollarExchangeRate))}
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>Taxas Bancárias</Label>
               <Input type="number" min={0} step="0.01" value={financialDetails.bank_fees}
                 onChange={(e) => setFinancialDetails({ ...financialDetails, bank_fees: parseFloat(e.target.value) || 0 })} />
+              {dollarExchangeRate && dollarExchangeRate > 0 && financialDetails.bank_fees > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  BRL: {fmtBrl(calcBrl(financialDetails.bank_fees, dollarExchangeRate))}
+                </p>
+              )}
             </div>
           </div>
           <Separator />
@@ -503,8 +495,9 @@ export function EditDocumentView() {
                 {currency} {calcTotal(items, financialDetails).toFixed(2)}
               </p>
               {dollarExchangeRate && dollarExchangeRate > 0 && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  ≈ BRL {(calcTotal(items, financialDetails) * dollarExchangeRate).toFixed(2)} (câmbio: {dollarExchangeRate.toFixed(4)})
+                <p className="text-sm text-muted-foreground mt-1">
+                  BRL: {fmtBrl(calcBrl(calcTotal(items, financialDetails), dollarExchangeRate))}
+                  <span className="text-xs ml-1">({dollarExchangeRate})</span>
                 </p>
               )}
             </div>
@@ -512,34 +505,24 @@ export function EditDocumentView() {
         </CardContent>
       </Card>
 
-      {/* Order Info */}
+      {/* Order Reference, Purpose, Payment Terms */}
       <Card>
         <CardHeader><CardTitle className="text-base">Order Information</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Purchase Order (Your Order)</Label>
-              <Input placeholder="ex: 101495" value={orderNumber}
-                onChange={(e) => setOrderNumber(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Purpose</Label>
-              <Select value={purpose} onValueChange={setPurpose}>
-                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Venda">Venda</SelectItem>
-                  <SelectItem value="Amostra">Amostra</SelectItem>
-                  <SelectItem value="Demonstração">Demonstração</SelectItem>
-                  <SelectItem value="Bonificação">Bonificação</SelectItem>
-                  <SelectItem value="Remessa">Remessa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Payment Terms</Label>
-              <Input placeholder="ex: 50% advance, 50% before shipment" value={paymentTerms}
-                onChange={(e) => setPaymentTerms(e.target.value)} />
-            </div>
+          <div className="space-y-2">
+            <Label>Order Reference (Client / ERP)</Label>
+            <Input placeholder="Número do pedido no ERP do cliente" value={orderNumber}
+              onChange={(e) => setOrderNumber(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Purpose</Label>
+            <Input placeholder="e.g.: Commercial export of medical devices" value={purpose}
+              onChange={(e) => setPurpose(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Payment Terms</Label>
+            <Input placeholder="e.g.: 30% advance, 70% before shipment" value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)} />
           </div>
         </CardContent>
       </Card>

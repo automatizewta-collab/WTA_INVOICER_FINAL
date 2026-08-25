@@ -63,6 +63,9 @@ export async function PUT(
     if (data.financialDetails !== undefined) updateData.financialDetails = JSON.stringify(data.financialDetails);
     if (data.notes !== undefined) updateData.notes = JSON.stringify(data.notes);
     if (data.recipientInfo !== undefined) updateData.recipientInfo = JSON.stringify(data.recipientInfo);
+    if (data.orderNumber !== undefined) updateData.orderNumber = data.orderNumber;
+    if (data.purpose !== undefined) updateData.purpose = data.purpose;
+    if (data.paymentTerms !== undefined) updateData.paymentTerms = data.paymentTerms;
 
     const updated = await db.document.update({
       where: { id },
@@ -79,6 +82,8 @@ export async function PUT(
     if (data.senderId !== undefined) syncFields.senderId = data.senderId;
     if (data.recipientId !== undefined) syncFields.recipientId = data.recipientId;
     if (data.recipientInfo !== undefined) syncFields.recipientInfo = updateData.recipientInfo;
+    if (data.purpose !== undefined) syncFields.purpose = updateData.purpose;
+    if (data.paymentTerms !== undefined) syncFields.paymentTerms = updateData.paymentTerms;
 
     if (Object.keys(syncFields).length > 0) {
       if (document.documentType === "proforma") {
@@ -113,7 +118,9 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
     }
-    return NextResponse.json({ error: "Failed to update document" }, { status: 500 });
+    console.error("[DOCUMENTS PUT] Error updating document:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to update document", details: message }, { status: 500 });
   }
 }
 

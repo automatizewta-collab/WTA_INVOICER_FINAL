@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
     });
     const totalValue = issuedDocs.reduce((sum, doc) => {
       try {
-        const fd = JSON.parse(doc.financialDetails);
-        return sum + (fd.total_value || 0);
+        const fd = typeof doc.financialDetails === 'string' ? JSON.parse(doc.financialDetails) : (doc.financialDetails || {});
+        return sum + ((fd as Record<string, number>).total_value || 0);
       } catch {
         return sum;
       }
@@ -66,6 +66,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const data = documentCreateSchema.parse(body);
+
+    // Auth: get current user for createdById (non-blocking)
+    let createdById: string | null = null;
+    try {
+      const session = await getServerSession(authOptions);
+      const uid = (session?.user as unknown as { id: string } | undefined)?.id;
+      if (uid) {
+        // Verify user exists in DB before using as FK
+        const exists = await db.user.findUnique({ where: { id: uid }, select: { id: true } });
+        if (exists) createdById = uid;
+      }
+    } catch {
+      // Session unavailable — continue without createdById
+    }
 
     // Generate number: use custom (OV number) or auto-generate
     let number: string;
@@ -113,7 +127,7 @@ export async function POST(request: NextRequest) {
       purpose: data.purpose || null,
       paymentTerms: data.paymentTerms || null,
       language: data.language,
-      createdById: currentUser?.id || null,
+      createdById,
     };
 
     let results: unknown[] = [];
@@ -182,6 +196,8 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
     }
-    return NextResponse.json({ error: "Failed to create document" }, { status: 500 });
+    console.error("[DOCUMENTS POST] Error creating document:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: "Failed to create document", details: message }, { status: 500 });
   }
 }

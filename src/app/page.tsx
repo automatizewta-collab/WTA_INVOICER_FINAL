@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { FileText, LayoutDashboard, Package, PlusCircle, Building2, Settings, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 import { LoginPage } from "@/components/views/LoginView";
 import { DashboardView } from "@/components/views/DashboardView";
 import { DocumentsView } from "@/components/views/DocumentsView";
@@ -111,7 +112,10 @@ function AppSidebar() {
             </div>
           )}
           <button
-            onClick={logout}
+            onClick={() => {
+              signOut({ redirect: false }).catch(() => {});
+              logout();
+            }}
             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full group-data-[collapsible=icon]:justify-center"
           >
             <LogOut className="h-4 w-4 shrink-0" />
