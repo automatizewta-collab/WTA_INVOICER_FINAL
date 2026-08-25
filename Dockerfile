@@ -65,11 +65,13 @@ COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts
 COPY --from=builder /app/upload/itens.csv ./upload/itens.csv
 
 # Create data directories
-RUN mkdir -p /app/data /app/data/uploads /app/data/pdfs /app/upload /app/node_modules/.prisma && \
-    chown -R nextjs:nodejs /app
+RUN mkdir -p /app/data /app/data/uploads /app/data/pdfs /app/upload /app/node_modules/.prisma
 
 # Install bun (for seed) and prisma CLI (for db push + generate) globally
 RUN npm install -g bun && npm install -g prisma@6
+
+# Fix permissions: nextjs user needs write access to /app AND global prisma
+RUN chown -R nextjs:nodejs /app /usr/local/lib/node_modules/prisma
 
 USER nextjs
 
