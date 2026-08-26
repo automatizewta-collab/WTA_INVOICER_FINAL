@@ -48,7 +48,7 @@ async function getLogoBase64(sender: Record<string, unknown> | null): Promise<st
 }
 
 /** Professional box style — rounded, slightly thicker border */
-const BOX = "padding:14px 18px;border:1.5px solid #c8cdd3;border-radius:10px;font-size:11px;background:#fafbfc;line-height:1.65;";
+const BOX = "padding:14px 18px;border:1.5px solid #c8cdd3;border-radius:10px;font-size:11px;background:#fafbfc;line-height:1.65;page-break-inside:avoid;break-inside:avoid;";
 const BOX_HEADER = "font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:8px;border-bottom:1.5px solid #e2e5ea;padding-bottom:6px;";
 
 /** Parse bank details text into labeled rows */
@@ -164,10 +164,10 @@ function buildPdfHtml(
       ? '<div style="' + BOX + 'flex:1;min-width:0"><div style="' + BOX_HEADER + '">Order Information</div>' + orderInfoLines + "</div>"
       : '<div style="' + BOX + 'flex:1;min-width:0"><div style="' + BOX_HEADER + '">Order Information</div><span style="color:#9ca3af">&mdash;</span></div>';
     const shippingBox = '<div style="' + BOX + 'flex:1;min-width:0;background:#f0f4ff;border-color:#c7d5f5"><div style="' + BOX_HEADER + '">Shipping Address</div>' + shippingContent + "</div>";
-    row2 = '<div style="display:flex;gap:16px;margin-bottom:20px">' + orderBox + shippingBox + "</div>";
+    row2 = '<div style="display:flex;gap:16px;margin-bottom:20px;page-break-inside:avoid;break-inside:avoid">' + orderBox + shippingBox + "</div>";
 
     partyGrid =
-      '<div style="display:flex;gap:16px;margin-bottom:20px">' + senderBox + billingBox + "</div>" +
+      '<div style="display:flex;gap:16px;margin-bottom:20px;page-break-inside:avoid;break-inside:avoid">' + senderBox + billingBox + "</div>" +
       row2;
   } else {
     if (sender) {
@@ -226,6 +226,12 @@ function buildPdfHtml(
     rows.push("<tr style=\"" + bg + "\">" + row + "</tr>");
   }
 
+  // Calculate box packaging weight (gross only — no net contribution from packaging)
+  const sdRaw = (doc.shipmentDetails || {}) as Record<string, unknown>;
+  const sdBoxes = (sdRaw.boxes || []) as Record<string, unknown>[];
+  const boxesGw = sdBoxes.reduce((s, b) => s + (Number(b.gross_weight || 0) * Number(b.quantity || 1)), 0);
+  const finalGw = totalGw + boxesGw;
+
   // Totals row for packing list — columns: Code, Description, HTSUS, Qty, G.W., N.W. = 6 cols
   if (isPackingList && items.length > 0) {
     const totalQty = (items as Record<string, unknown>[]).reduce((s, i) => s + Number(i.quantity || 0), 0);
@@ -233,7 +239,7 @@ function buildPdfHtml(
       '<tr style="font-weight:700;background:#f3f4f6;border-top:2px solid #111">' +
       '<td colspan="3" style="padding:8px 8px;border-bottom:1.5px solid #111">TOTAL</td>' +
       '<td style="padding:8px 8px;text-align:center;border-bottom:1.5px solid #111">' + totalQty + "</td>" +
-      '<td style="padding:8px 8px;text-align:right;border-bottom:1.5px solid #111">' + fmtWt(totalGw) + "</td>" +
+      '<td style="padding:8px 8px;text-align:right;border-bottom:1.5px solid #111">' + fmtWt(finalGw) + "</td>" +
       '<td style="padding:8px 8px;text-align:right;border-bottom:1.5px solid #111">' + fmtWt(totalNw) + "</td>" +
       "</tr>"
     );
@@ -280,7 +286,7 @@ function buildPdfHtml(
     const hasBrl = rate > 0;
 
     financialHtml =
-      '<div style="margin-top:24px;display:flex;justify-content:flex-end">' +
+      '<div style="margin-top:24px;display:flex;justify-content:flex-end;page-break-inside:avoid;break-inside:avoid">' +
         '<div style="' + BOX + 'width:' + (hasBrl ? '380px' : '300px') + ';background:#fff"><div style="' + BOX_HEADER + '">' + (isEs ? "Resumen Financiero" : "Financial Summary") + "</div>" +
         '<table style="width:100%;font-size:11px;border-collapse:collapse">' +
         '<tr><td style="padding:4px 0;color:#6b7280">Subtotal</td><td style="padding:4px 0;text-align:right">' + curSym + subtotal.toFixed(2) + "</td>" +
@@ -329,6 +335,8 @@ function buildPdfHtml(
           if (b.quantity) parts.push(b.quantity + "x");
           if (b.type) parts.push(esc(b.type));
           if (b.dimensions) parts.push(esc(b.dimensions));
+          const bw = Number(b.gross_weight || 0);
+          if (bw > 0) parts.push(fmtWt(bw) + " kg");
           return parts.join(" ");
         }).join(", ");
         shipmentInner += "</div>";
@@ -336,12 +344,12 @@ function buildPdfHtml(
     }
 
     if (isPackingList && items.length > 0) {
-      const sdGw = Number((sd as Record<string, number>).gross_weight || 0);
-      const sdNw = Number((sd as Record<string, number>).net_weight || 0);
+      const displayGw = finalGw;
+      const displayNw = totalNw; // net weight = items only (no packaging)
       shipmentInner += (shipmentInner ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #e5e7eb">' : '<div>') +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;font-size:11px">' +
-        '<div><strong>Total G.W.:</strong> ' + fmtWt(sdGw || totalGw) + ' kg</div>' +
-        '<div><strong>Total N.W.:</strong> ' + fmtWt(sdNw || totalNw) + ' kg</div>' +
+        '<div><strong>Total G.W.:</strong> ' + fmtWt(displayGw) + ' kg</div>' +
+        '<div><strong>Total N.W.:</strong> ' + fmtWt(displayNw) + ' kg</div>' +
         '</div></div>';
     }
   }
@@ -362,7 +370,7 @@ function buildPdfHtml(
       ? '<div style="' + BOX + 'flex:1;min-width:0;background:#f9fafb;border-color:#e5e7eb"><div style="' + BOX_HEADER + '">' + (isEs ? "Detalles del Embarque" : "Shipment Details") + "</div>" + shipmentInner + "</div>"
       : "";
     if (bankBox && shipBox) {
-      bottomSectionHtml = '<div style="margin-top:24px;display:flex;gap:16px">' + bankBox + shipBox + "</div>";
+      bottomSectionHtml = '<div style="margin-top:24px;display:flex;gap:16px;page-break-inside:avoid;break-inside:avoid">' + bankBox + shipBox + "</div>";
     } else if (bankBox) {
       bottomSectionHtml = '<div style="margin-top:24px">' + bankBox + "</div>";
     } else if (shipBox) {
@@ -378,7 +386,7 @@ function buildPdfHtml(
   let notesHtml = "";
   if (notes.length > 0) {
     notesHtml =
-      '<div style="margin-top:20px;background:#fffbf0;border-left:4px solid #f59e0b;padding:12px 16px;font-size:11px;border-radius:0 10px 10px 0">' +
+      '<div style="margin-top:20px;background:#fffbf0;border-left:4px solid #f59e0b;padding:12px 16px;font-size:11px;border-radius:0 10px 10px 0;page-break-inside:avoid;break-inside:avoid">' +
       '<p style="font-weight:700;margin-bottom:6px;color:#92400e">' + (isEs ? "Notas" : "Notes") + "</p>" +
       notes.map(n => '<p style="margin:3px 0;color:#78350f">\u2022 ' + esc(n) + "</p>").join("") +
       "</div>";
@@ -415,6 +423,20 @@ function buildPdfHtml(
       "</div>";
   }
 
+  // ── Signature block ──
+  let signatureHtml = "";
+  if (sender) {
+    const senderName = esc(String(sender.name || ""));
+    signatureHtml =
+      '<div style="margin-top:48px;display:flex;justify-content:flex-end;gap:60px;page-break-inside:avoid;break-inside:avoid">' +
+        '<div style="text-align:center;width:220px">' +
+          '<div style="border-top:1.5px solid #374151;margin-bottom:6px;padding-top:4px">&nbsp;</div>' +
+          '<div style="font-size:11px;font-weight:600;color:#111">' + senderName + '</div>' +
+          '<div style="font-size:9px;color:#6b7280;margin-top:2px">' + (isEs ? "Firma Autorizada" : "Authorized Signature") + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
   // ── Assemble final HTML ──
   return "<!DOCTYPE html>" +
     '<html lang="' + (isEs ? "es" : "en") + '">' +
@@ -429,6 +451,7 @@ function buildPdfHtml(
     'table th:first-child { border-radius: 6px 0 0 0; }' +
     'table th:last-child { border-radius: 0 6px 0 0; }' +
     '.separator { border: none; border-top: 2px solid #1e293b; margin: 0; }' +
+    '.no-break { page-break-inside: avoid !important; break-inside: avoid !important; }' +
     '</style></head><body>' +
     (isDraft ? '<div class="watermark">DRAFT</div>' : '') +
     '<div class="content">' +
@@ -439,6 +462,7 @@ function buildPdfHtml(
     financialHtml +
     bottomSectionHtml +
     notesHtml +
+    signatureHtml +
     '<div style="margin-top:20px;text-align:center;font-size:9px;color:#c0c4cc;letter-spacing:0.3px">Generated by Invoicer \u00b7 ' + new Date().toISOString().slice(0, 10) + "</div>" +
     '</div></body></html>';
 }

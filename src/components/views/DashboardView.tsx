@@ -14,13 +14,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { FileText, FilePlus, Package, DollarSign, Clock, Database } from "lucide-react";
+import { DocumentTypeBadge } from "@/components/shared/DocumentTypeBadge";
 import { format } from "date-fns";
 import { useAppStore } from "@/lib/store";
 import type {
   DocumentWithRelations,
-  DocumentType,
-  DOCUMENT_TYPE_LABELS,
-  DOCUMENT_STATUS_LABELS,
 } from "@/lib/types";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { apiFetch } from "@/lib/utils";
@@ -33,15 +31,14 @@ interface DocCounts {
   totalValue: number;
 }
 
-const typeLabels: Record<DocumentType, string> = {
-  proforma: "Proforma",
-  invoice: "Invoice",
-  packing_list: "Packing List",
-};
-
 const statusLabels: Record<string, string> = {
   draft: "Draft",
   issued: "Issued",
+};
+
+const statusStyles: Record<string, string> = {
+  draft: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+  issued: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
 };
 
 export function DashboardView() {
@@ -206,15 +203,12 @@ export function DashboardView() {
                         {doc.number}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary">
-                          {typeLabels[doc.documentType as DocumentType] || doc.documentType}
-                        </Badge>
+                        <DocumentTypeBadge type={doc.documentType} />
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={
-                            doc.status === "issued" ? "default" : "outline"
-                          }
+                          variant="outline"
+                          className={statusStyles[doc.status] || ""}
                         >
                           {statusLabels[doc.status] || doc.status}
                         </Badge>
