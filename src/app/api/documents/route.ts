@@ -81,10 +81,11 @@ export async function POST(request: NextRequest) {
       // Session unavailable — continue without createdById
     }
 
-    // Generate number: use custom (OV number) or auto-generate
+    // Generate number: use custom > orderNumber (OV) > auto-generate
     let number: string;
-    if (data.customNumber) {
-      number = String(data.customNumber);
+    const desiredNumber = data.customNumber || data.orderNumber || null;
+    if (desiredNumber) {
+      number = String(desiredNumber);
       // Check for uniqueness
       const existing = await db.document.findUnique({ where: { number } });
       if (existing) {
